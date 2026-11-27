@@ -19,12 +19,12 @@ LOGBOOK session entry).
   destructor stubs 0x4155f0 / 0x615bb0, the constant stores 0x58f860
   (`= 500`) / 0x5a0930 (`= 0`), 0x60b9e0 (`g = rand()`), and the
   iostream initializers of the CRT (0x61ca0a.., 0x61d61c..).
-- **C runtime status "provided by the platform library" (user decision
-  2026-11-26, CLAUDE.md "Library and compiler code").** Add the status
-  (inventory.py, progress.py/progress.html as its own colour, not
-  counted as verified), list which CRT functions the game's behaviour
-  depends on (verify those: _ftol, new/delete, memmove, sprintf-family,
-  qsort, rand if used, anything the simulation calls) and mark the rest.
+- **C runtime depends-on list (2026-11-27, re/crt_dependencies.md).**
+  Status `platform` exists (300 crt rows; tools/crt_dependencies.py).
+  Left: name the 206 candidates' unnamed CRT_sub_/IOS_sub_ rows, re-run
+  `crt_dependencies.py apply` when a candidate turns out OS-only (file
+  search, thread start, ...), and verify the rest (_ftol, new/delete,
+  memmove, string and sprintf family, rand, 64-bit helpers).
 - **DirectDraw renderer, what is left (wip/ddraw-render, 2026-11-26).**
   The fake DirectDraw (`test/fake_ddraw.*`) and the emulator setup
   (`ddw_*` / `dgd_*` in specs/framework.py: COM probes, import slots of

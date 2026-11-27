@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-<rect width="1600" height="1258" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1340" width="1600" height="1340" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="1600" height="1340" fill="#ffffff"/>
 <text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">45.5%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
@@ -17,16 +17,28 @@
 <rect x="795.2" y="154" width="134.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.6%</title></rect>
 <text x="862.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.6%</text>
 <rect x="929.9" y="154" width="2.4" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
-<rect x="932.3" y="154" width="216.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 15.4%</title></rect>
-<text x="1040.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">15.4%</text>
-<rect x="1148.6" y="154" width="427.4" height="40" fill="#e8a39b"><title>Not understood yet: 30.4%</title></rect>
-<text x="1362.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">30.4%</text>
-<rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
-<rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
-<rect x="869.6" y="216" width="16" height="16" fill="#a9d18e"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Reimplemented, not verified yet</text>
-<rect x="1214.8" y="216" width="16" height="16" fill="#f2c86b"/><text x="1238.8" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
-<rect x="1578.4" y="216" width="16" height="16" fill="#e8a39b"/><text x="1602.4" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
-<g transform="translate(0 258)">
+<rect x="932.3" y="154" width="215.8" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 15.3%</title></rect>
+<text x="1040.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">15.3%</text>
+<rect x="1148.1" y="154" width="396.9" height="40" fill="#e8a39b"><title>Not understood yet: 28.2%</title></rect>
+<text x="1346.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">28.2%</text>
+<rect x="1545" y="154" width="31" height="40" fill="#7d8590"><title>C runtime, provided by the platform library: 2.2%</title></rect>
+<text x="24" y="235" font-size="20" font-weight="600" fill="#1e2924">Excl. platform</text>
+<rect x="170" y="208" width="639.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 45.5%</title></rect>
+<text x="489.6" y="235" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">45.5%</text>
+<rect x="809.3" y="208" width="137.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.8%</title></rect>
+<text x="878.1" y="235" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.8%</text>
+<rect x="947" y="208" width="2.5" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
+<rect x="949.5" y="208" width="220.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 15.7%</title></rect>
+<text x="1059.8" y="235" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">15.7%</text>
+<rect x="1170.2" y="208" width="405.8" height="40" fill="#e8a39b"><title>Not understood yet: 28.9%</title></rect>
+<text x="1373.1" y="235" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">28.9%</text>
+<rect x="170" y="270" width="16" height="16" fill="#3d9a50"/><text x="194" y="284" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
+<rect x="607.2" y="270" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="284" font-size="19" fill="#1e2924">Verified by tests only</text>
+<rect x="869.6" y="270" width="16" height="16" fill="#a9d18e"/><text x="893.6" y="284" font-size="19" fill="#1e2924">Reimplemented, not verified yet</text>
+<rect x="1214.8" y="270" width="16" height="16" fill="#f2c86b"/><text x="1238.8" y="284" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
+<rect x="170" y="298" width="16" height="16" fill="#e8a39b"/><text x="194" y="312" font-size="19" fill="#1e2924">Not understood yet</text>
+<rect x="395.6" y="298" width="16" height="16" fill="#7d8590"/><text x="419.6" y="312" font-size="19" fill="#1e2924">C runtime, provided by the platform library</text>
+<g transform="translate(0 340)">
 <g><rect x="0" y="0" width="1177" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
 <text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 45.5% verified (37.5% in a whole game)</text>
 <g><title>(free functions): 908 functions</title><rect x="2" y="19" width="412" height="590.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
@@ -32891,98 +32903,98 @@
 <text x="1182" y="675.9" font-size="12" font-weight="600" fill="#ffffff">C runtime — 0.1% verified (0.1% in a whole game)</text>
 <g><title>(free functions): 467 functions</title><rect x="1179" y="681.9" width="278.8" height="162.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="1181" y="690.4" font-size="8.5" fill="#ffffff">(free functions)</text>
-<rect x="1179.5" y="693.4" width="35.6" height="57.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c25f @ 0x0062c25f
-3612 bytes — Classified (class/role known)</title></rect>
+<rect x="1179.5" y="693.4" width="35.6" height="57.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c25f @ 0x0062c25f
+3612 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1179.5" y="751.3" width="35.6" height="41.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629011 @ 0x00629011
 2597 bytes — Classified (class/role known)</title></rect>
 <rect x="1179.5" y="793" width="35.6" height="29.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624cb0 @ 0x00624cb0
 1857 bytes — Classified (class/role known)</title></rect>
-<rect x="1179.5" y="822.8" width="35.6" height="21.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a103 @ 0x0062a103
-1341 bytes — Classified (class/role known)</title></rect>
-<rect x="1215.1" y="693.4" width="24.3" height="29" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d693 @ 0x0062d693
-1233 bytes — Classified (class/role known)</title></rect>
-<rect x="1215.1" y="722.4" width="24.3" height="23.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620941 @ 0x00620941
-1007 bytes — Classified (class/role known)</title></rect>
-<rect x="1215.1" y="746.1" width="24.3" height="20.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626a8e @ 0x00626a8e
-869 bytes — Classified (class/role known)</title></rect>
-<rect x="1215.1" y="766.6" width="24.3" height="19.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626740 @ 0x00626740
-846 bytes — Classified (class/role known)</title></rect>
+<rect x="1179.5" y="822.8" width="35.6" height="21.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a103 @ 0x0062a103
+1341 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1215.1" y="693.4" width="24.3" height="29" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d693 @ 0x0062d693
+1233 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1215.1" y="722.4" width="24.3" height="23.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620941 @ 0x00620941
+1007 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1215.1" y="746.1" width="24.3" height="20.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626a8e @ 0x00626a8e
+869 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1215.1" y="766.6" width="24.3" height="19.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626740 @ 0x00626740
+846 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1215.1" y="786.5" width="24.3" height="19.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623470 @ 0x00623470
 821 bytes — Classified (class/role known)</title></rect>
 <rect x="1215.1" y="805.9" width="24.3" height="19.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>memmove @ 0x0061e860
 821 bytes — Classified (class/role known)</title></rect>
-<rect x="1215.1" y="825.2" width="24.3" height="19.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62853b @ 0x0062853b
-811 bytes — Classified (class/role known)</title></rect>
-<rect x="1239.4" y="693.4" width="19.1" height="23.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628866 @ 0x00628866
-777 bytes — Classified (class/role known)</title></rect>
-<rect x="1239.4" y="716.7" width="19.1" height="22.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628d1b @ 0x00628d1b
-758 bytes — Classified (class/role known)</title></rect>
-<rect x="1239.4" y="739.3" width="19.1" height="21.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620e0f @ 0x00620e0f
-719 bytes — Classified (class/role known)</title></rect>
-<rect x="1239.4" y="760.9" width="19.1" height="21.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6237a5 @ 0x006237a5
-719 bytes — Classified (class/role known)</title></rect>
-<rect x="1239.4" y="782.4" width="19.1" height="20.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62648b @ 0x0062648b
-693 bytes — Classified (class/role known)</title></rect>
-<rect x="1239.4" y="803.1" width="19.1" height="20.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e1aa @ 0x0062e1aa
-691 bytes — Classified (class/role known)</title></rect>
-<rect x="1239.4" y="823.8" width="19.1" height="20.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62db64 @ 0x0062db64
-684 bytes — Classified (class/role known)</title></rect>
-<rect x="1258.5" y="693.4" width="17.3" height="21.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625772 @ 0x00625772
-647 bytes — Classified (class/role known)</title></rect>
-<rect x="1258.5" y="714.8" width="17.3" height="21" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e9ce @ 0x0062e9ce
-637 bytes — Classified (class/role known)</title></rect>
-<rect x="1258.5" y="735.8" width="17.3" height="19.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627065 @ 0x00627065
-587 bytes — Classified (class/role known)</title></rect>
+<rect x="1215.1" y="825.2" width="24.3" height="19.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62853b @ 0x0062853b
+811 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1239.4" y="693.4" width="19.1" height="23.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628866 @ 0x00628866
+777 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1239.4" y="716.7" width="19.1" height="22.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628d1b @ 0x00628d1b
+758 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1239.4" y="739.3" width="19.1" height="21.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620e0f @ 0x00620e0f
+719 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1239.4" y="760.9" width="19.1" height="21.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6237a5 @ 0x006237a5
+719 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1239.4" y="782.4" width="19.1" height="20.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62648b @ 0x0062648b
+693 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1239.4" y="803.1" width="19.1" height="20.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e1aa @ 0x0062e1aa
+691 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1239.4" y="823.8" width="19.1" height="20.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62db64 @ 0x0062db64
+684 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1258.5" y="693.4" width="17.3" height="21.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625772 @ 0x00625772
+647 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1258.5" y="714.8" width="17.3" height="21" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e9ce @ 0x0062e9ce
+637 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1258.5" y="735.8" width="17.3" height="19.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627065 @ 0x00627065
+587 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1258.5" y="755.2" width="17.3" height="19.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620001 @ 0x00620001
 582 bytes — Classified (class/role known)</title></rect>
-<rect x="1258.5" y="774.5" width="17.3" height="18" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e732 @ 0x0062e732
-544 bytes — Classified (class/role known)</title></rect>
-<rect x="1258.5" y="792.4" width="17.3" height="17.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e45d @ 0x0062e45d
-535 bytes — Classified (class/role known)</title></rect>
+<rect x="1258.5" y="774.5" width="17.3" height="18" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e732 @ 0x0062e732
+544 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1258.5" y="792.4" width="17.3" height="17.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e45d @ 0x0062e45d
+535 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1258.5" y="810.1" width="17.3" height="17.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62bb74 @ 0x0062bb74
 518 bytes — Classified (class/role known)</title></rect>
-<rect x="1258.5" y="827.2" width="17.3" height="17.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62767c @ 0x0062767c
-516 bytes — Classified (class/role known)</title></rect>
-<rect x="1275.7" y="693.4" width="15.5" height="18.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b98b @ 0x0062b98b
-489 bytes — Classified (class/role known)</title></rect>
-<rect x="1275.7" y="711.5" width="15.5" height="17.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623000 @ 0x00623000
-473 bytes — Classified (class/role known)</title></rect>
+<rect x="1258.5" y="827.2" width="17.3" height="17.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62767c @ 0x0062767c
+516 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1275.7" y="693.4" width="15.5" height="18.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b98b @ 0x0062b98b
+489 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1275.7" y="711.5" width="15.5" height="17.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623000 @ 0x00623000
+473 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1275.7" y="729" width="15.5" height="17.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621dc2 @ 0x00621dc2
 467 bytes — Classified (class/role known)</title></rect>
-<rect x="1275.7" y="746.2" width="15.5" height="16.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6262c6 @ 0x006262c6
-453 bytes — Classified (class/role known)</title></rect>
-<rect x="1275.7" y="762.9" width="15.5" height="16.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624205 @ 0x00624205
-452 bytes — Classified (class/role known)</title></rect>
-<rect x="1275.7" y="779.7" width="15.5" height="16.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6232b1 @ 0x006232b1
-447 bytes — Classified (class/role known)</title></rect>
-<rect x="1275.7" y="796.2" width="15.5" height="16.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629de4 @ 0x00629de4
-436 bytes — Classified (class/role known)</title></rect>
-<rect x="1275.7" y="812.3" width="15.5" height="16.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623ced @ 0x00623ced
-435 bytes — Classified (class/role known)</title></rect>
-<rect x="1275.7" y="828.4" width="15.5" height="15.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622365 @ 0x00622365
-431 bytes — Classified (class/role known)</title></rect>
-<rect x="1291.2" y="693.4" width="14.8" height="16.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625ed2 @ 0x00625ed2
-429 bytes — Classified (class/role known)</title></rect>
+<rect x="1275.7" y="746.2" width="15.5" height="16.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6262c6 @ 0x006262c6
+453 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1275.7" y="762.9" width="15.5" height="16.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624205 @ 0x00624205
+452 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1275.7" y="779.7" width="15.5" height="16.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6232b1 @ 0x006232b1
+447 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1275.7" y="796.2" width="15.5" height="16.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629de4 @ 0x00629de4
+436 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1275.7" y="812.3" width="15.5" height="16.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623ced @ 0x00623ced
+435 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1275.7" y="828.4" width="15.5" height="15.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622365 @ 0x00622365
+431 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1291.2" y="693.4" width="14.8" height="16.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625ed2 @ 0x00625ed2
+429 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1291.2" y="710" width="14.8" height="16.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625a1a @ 0x00625a1a
 428 bytes — Classified (class/role known)</title></rect>
-<rect x="1291.2" y="726.5" width="14.8" height="15.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622e10 @ 0x00622e10
-395 bytes — Classified (class/role known)</title></rect>
-<rect x="1291.2" y="741.8" width="14.8" height="15.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ec76 @ 0x0062ec76
-391 bytes — Classified (class/role known)</title></rect>
-<rect x="1291.2" y="756.9" width="14.8" height="15" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626125 @ 0x00626125
-389 bytes — Classified (class/role known)</title></rect>
+<rect x="1291.2" y="726.5" width="14.8" height="15.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622e10 @ 0x00622e10
+395 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1291.2" y="741.8" width="14.8" height="15.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ec76 @ 0x0062ec76
+391 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1291.2" y="756.9" width="14.8" height="15" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626125 @ 0x00626125
+389 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1291.2" y="771.9" width="14.8" height="14.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d333 @ 0x0062d333
 386 bytes — Classified (class/role known)</title></rect>
-<rect x="1291.2" y="786.8" width="14.8" height="14.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627420 @ 0x00627420
-381 bytes — Classified (class/role known)</title></rect>
-<rect x="1291.2" y="801.5" width="14.8" height="14.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61dd3a @ 0x0061dd3a
-374 bytes — Classified (class/role known)</title></rect>
+<rect x="1291.2" y="786.8" width="14.8" height="14.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627420 @ 0x00627420
+381 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1291.2" y="801.5" width="14.8" height="14.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61dd3a @ 0x0061dd3a
+374 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1291.2" y="816" width="14.8" height="14.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628167 @ 0x00628167
 368 bytes — Classified (class/role known)</title></rect>
-<rect x="1291.2" y="830.2" width="14.8" height="14.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b441 @ 0x0062b441
-364 bytes — Classified (class/role known)</title></rect>
-<rect x="1306" y="693.4" width="13.8" height="15" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c89e @ 0x0061c89e
-364 bytes — Classified (class/role known)</title></rect>
+<rect x="1291.2" y="830.2" width="14.8" height="14.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b441 @ 0x0062b441
+364 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1306" y="693.4" width="13.8" height="15" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c89e @ 0x0061c89e
+364 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1306" y="708.4" width="13.8" height="14.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621832 @ 0x00621832
 353 bytes — Classified (class/role known)</title></rect>
 <rect x="1306" y="723" width="13.8" height="14.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f547 @ 0x0061f547
@@ -32991,172 +33003,172 @@
 340 bytes — Classified (class/role known)</title></rect>
 <rect x="1306" y="751.5" width="13.8" height="13.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627d28 @ 0x00627d28
 329 bytes — Classified (class/role known)</title></rect>
-<rect x="1306" y="765.1" width="13.8" height="13.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62bd7a @ 0x0062bd7a
-329 bytes — Classified (class/role known)</title></rect>
+<rect x="1306" y="765.1" width="13.8" height="13.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62bd7a @ 0x0062bd7a
+329 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1306" y="778.7" width="13.8" height="13.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62553f @ 0x0062553f
 320 bytes — Classified (class/role known)</title></rect>
 <rect x="1306" y="791.9" width="13.8" height="13.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625bc6 @ 0x00625bc6
 320 bytes — Classified (class/role known)</title></rect>
-<rect x="1306" y="805.1" width="13.8" height="13.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62bf40 @ 0x0062bf40
-320 bytes — Classified (class/role known)</title></rect>
-<rect x="1306" y="818.3" width="13.8" height="13.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629ac2 @ 0x00629ac2
-318 bytes — Classified (class/role known)</title></rect>
-<rect x="1306" y="831.4" width="13.8" height="12.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623ad5 @ 0x00623ad5
-312 bytes — Classified (class/role known)</title></rect>
+<rect x="1306" y="805.1" width="13.8" height="13.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62bf40 @ 0x0062bf40
+320 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1306" y="818.3" width="13.8" height="13.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629ac2 @ 0x00629ac2
+318 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1306" y="831.4" width="13.8" height="12.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623ad5 @ 0x00623ad5
+312 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1319.8" y="693.4" width="13.3" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fcc0 @ 0x0061fcc0
 312 bytes — Classified (class/role known)</title></rect>
 <rect x="1333.1" y="693.4" width="13.1" height="13.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_longjmp @ 0x00621fc0
 309 bytes — Identified (purpose known)</title></rect>
-<rect x="1346.2" y="693.4" width="13" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629f98 @ 0x00629f98
-306 bytes — Classified (class/role known)</title></rect>
+<rect x="1346.2" y="693.4" width="13" height="13.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629f98 @ 0x00629f98
+306 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1359.2" y="693.4" width="12.9" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a82c @ 0x0062a82c
 304 bytes — Classified (class/role known)</title></rect>
-<rect x="1372.2" y="693.4" width="12.5" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ae1b @ 0x0062ae1b
-293 bytes — Classified (class/role known)</title></rect>
-<rect x="1384.6" y="693.4" width="12.4" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ab3a @ 0x0062ab3a
-291 bytes — Classified (class/role known)</title></rect>
-<rect x="1397" y="693.4" width="12.3" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626ef5 @ 0x00626ef5
-290 bytes — Classified (class/role known)</title></rect>
-<rect x="1409.3" y="693.4" width="12.2" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e08c @ 0x0062e08c
-286 bytes — Classified (class/role known)</title></rect>
-<rect x="1421.5" y="693.4" width="12" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620247 @ 0x00620247
-283 bytes — Classified (class/role known)</title></rect>
-<rect x="1433.5" y="693.4" width="11.9" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62041b @ 0x0062041b
-280 bytes — Classified (class/role known)</title></rect>
+<rect x="1372.2" y="693.4" width="12.5" height="13.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ae1b @ 0x0062ae1b
+293 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1384.6" y="693.4" width="12.4" height="13.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ab3a @ 0x0062ab3a
+291 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1397" y="693.4" width="12.3" height="13.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626ef5 @ 0x00626ef5
+290 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1409.3" y="693.4" width="12.2" height="13.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e08c @ 0x0062e08c
+286 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1421.5" y="693.4" width="12" height="13.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620247 @ 0x00620247
+283 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1433.5" y="693.4" width="11.9" height="13.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62041b @ 0x0062041b
+280 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1445.4" y="693.4" width="11.9" height="13.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624b98 @ 0x00624b98
 280 bytes — Classified (class/role known)</title></rect>
 <rect x="1319.8" y="706.8" width="12" height="13.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f9f0 @ 0x0061f9f0
 279 bytes — Classified (class/role known)</title></rect>
-<rect x="1319.8" y="720.1" width="12" height="13.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62df79 @ 0x0062df79
-275 bytes — Classified (class/role known)</title></rect>
-<rect x="1319.8" y="733.2" width="12" height="13" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c080 @ 0x0062c080
-272 bytes — Classified (class/role known)</title></rect>
-<rect x="1319.8" y="746.2" width="12" height="12.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6225e4 @ 0x006225e4
-268 bytes — Classified (class/role known)</title></rect>
+<rect x="1319.8" y="720.1" width="12" height="13.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62df79 @ 0x0062df79
+275 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1319.8" y="733.2" width="12" height="13" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c080 @ 0x0062c080
+272 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1319.8" y="746.2" width="12" height="12.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6225e4 @ 0x006225e4
+268 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1319.8" y="758.9" width="12" height="12.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625d06 @ 0x00625d06
 266 bytes — Classified (class/role known)</title></rect>
-<rect x="1319.8" y="771.6" width="12" height="12.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WinMainCRTStartup @ 0x00621bc6
-264 bytes — Identified (purpose known)</title></rect>
-<rect x="1319.8" y="784.2" width="12" height="12.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626df3 @ 0x00626df3
-258 bytes — Classified (class/role known)</title></rect>
+<rect x="1319.8" y="771.6" width="12" height="12.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>WinMainCRTStartup @ 0x00621bc6
+264 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1319.8" y="784.2" width="12" height="12.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_626df3 @ 0x00626df3
+258 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1319.8" y="796.5" width="12" height="12.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_strncpy @ 0x00621a80
 254 bytes — Identified (purpose known)</title></rect>
-<rect x="1319.8" y="808.6" width="12" height="12" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628c20 @ 0x00628c20
-251 bytes — Classified (class/role known)</title></rect>
-<rect x="1319.8" y="820.5" width="12" height="11.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620847 @ 0x00620847
-250 bytes — Classified (class/role known)</title></rect>
+<rect x="1319.8" y="808.6" width="12" height="12" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628c20 @ 0x00628c20
+251 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1319.8" y="820.5" width="12" height="11.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620847 @ 0x00620847
+250 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1319.8" y="832.4" width="12" height="11.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fbc7 @ 0x0061fbc7
 249 bytes — Classified (class/role known)</title></rect>
 <rect x="1331.8" y="706.8" width="12.1" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62169c @ 0x0062169c
 232 bytes — Classified (class/role known)</title></rect>
-<rect x="1343.9" y="706.8" width="12" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627b87 @ 0x00627b87
-230 bytes — Classified (class/role known)</title></rect>
-<rect x="1355.9" y="706.8" width="12" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a9c1 @ 0x0062a9c1
-230 bytes — Classified (class/role known)</title></rect>
-<rect x="1367.9" y="706.8" width="11.7" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e395 @ 0x0061e395
-225 bytes — Classified (class/role known)</title></rect>
+<rect x="1343.9" y="706.8" width="12" height="11" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627b87 @ 0x00627b87
+230 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1355.9" y="706.8" width="12" height="11" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a9c1 @ 0x0062a9c1
+230 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1367.9" y="706.8" width="11.7" height="11" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e395 @ 0x0061e395
+225 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1379.6" y="706.8" width="11.7" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627340 @ 0x00627340
 224 bytes — Classified (class/role known)</title></rect>
 <rect x="1391.3" y="706.8" width="11.5" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62839f @ 0x0062839f
 220 bytes — Classified (class/role known)</title></rect>
 <rect x="1402.8" y="706.8" width="11.5" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f6a7 @ 0x0061f6a7
 220 bytes — Classified (class/role known)</title></rect>
-<rect x="1414.2" y="706.8" width="10.8" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627ed0 @ 0x00627ed0
-208 bytes — Classified (class/role known)</title></rect>
-<rect x="1425.1" y="706.8" width="10.8" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d07b @ 0x0062d07b
-208 bytes — Classified (class/role known)</title></rect>
+<rect x="1414.2" y="706.8" width="10.8" height="11" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627ed0 @ 0x00627ed0
+208 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1425.1" y="706.8" width="10.8" height="11" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d07b @ 0x0062d07b
+208 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1435.9" y="706.8" width="10.7" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6210de @ 0x006210de
 205 bytes — Classified (class/role known)</title></rect>
-<rect x="1446.6" y="706.8" width="10.7" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6240c0 @ 0x006240c0
-205 bytes — Classified (class/role known)</title></rect>
-<rect x="1331.8" y="717.8" width="10.8" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620558 @ 0x00620558
-204 bytes — Classified (class/role known)</title></rect>
-<rect x="1342.6" y="717.8" width="10.7" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b17c @ 0x0062b17c
-203 bytes — Classified (class/role known)</title></rect>
+<rect x="1446.6" y="706.8" width="10.7" height="11" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6240c0 @ 0x006240c0
+205 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1331.8" y="717.8" width="10.8" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620558 @ 0x00620558
+204 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1342.6" y="717.8" width="10.7" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b17c @ 0x0062b17c
+203 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1353.3" y="717.8" width="10.6" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f455 @ 0x0061f455
 202 bytes — Classified (class/role known)</title></rect>
-<rect x="1363.9" y="717.8" width="10.6" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6206d4 @ 0x006206d4
-201 bytes — Classified (class/role known)</title></rect>
+<rect x="1363.9" y="717.8" width="10.6" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6206d4 @ 0x006206d4
+201 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1374.5" y="717.8" width="10.5" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6211ab @ 0x006211ab
 200 bytes — Classified (class/role known)</title></rect>
-<rect x="1385.1" y="717.8" width="10.5" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6282d7 @ 0x006282d7
-200 bytes — Classified (class/role known)</title></rect>
-<rect x="1395.6" y="717.8" width="10.5" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d5cc @ 0x0062d5cc
-199 bytes — Classified (class/role known)</title></rect>
+<rect x="1385.1" y="717.8" width="10.5" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6282d7 @ 0x006282d7
+200 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1395.6" y="717.8" width="10.5" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d5cc @ 0x0062d5cc
+199 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1406.1" y="717.8" width="10.4" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f911 @ 0x0061f911
 198 bytes — Classified (class/role known)</title></rect>
-<rect x="1416.5" y="717.8" width="10.2" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62473b @ 0x0062473b
-194 bytes — Classified (class/role known)</title></rect>
-<rect x="1426.8" y="717.8" width="10.2" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625e10 @ 0x00625e10
-194 bytes — Classified (class/role known)</title></rect>
-<rect x="1437" y="717.8" width="10.2" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d1ce @ 0x0062d1ce
-193 bytes — Classified (class/role known)</title></rect>
-<rect x="1447.2" y="717.8" width="10.1" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6245dc @ 0x006245dc
-192 bytes — Classified (class/role known)</title></rect>
-<rect x="1331.8" y="728.6" width="9.9" height="10.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6278d6 @ 0x006278d6
-189 bytes — Classified (class/role known)</title></rect>
+<rect x="1416.5" y="717.8" width="10.2" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62473b @ 0x0062473b
+194 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1426.8" y="717.8" width="10.2" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625e10 @ 0x00625e10
+194 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1437" y="717.8" width="10.2" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d1ce @ 0x0062d1ce
+193 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1447.2" y="717.8" width="10.1" height="10.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6245dc @ 0x006245dc
+192 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1331.8" y="728.6" width="9.9" height="10.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6278d6 @ 0x006278d6
+189 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1331.8" y="739.6" width="9.9" height="10.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_strchr @ 0x0062de10
 188 bytes — Identified (purpose known)</title></rect>
-<rect x="1331.8" y="750.4" width="9.9" height="10.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62eebc @ 0x0062eebc
-188 bytes — Classified (class/role known)</title></rect>
-<rect x="1331.8" y="761.3" width="9.9" height="10.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620362 @ 0x00620362
-185 bytes — Classified (class/role known)</title></rect>
-<rect x="1331.8" y="771.9" width="9.9" height="10.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629c92 @ 0x00629c92
-185 bytes — Classified (class/role known)</title></rect>
-<rect x="1331.8" y="782.6" width="9.9" height="10.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b706 @ 0x0062b706
-182 bytes — Classified (class/role known)</title></rect>
-<rect x="1331.8" y="793.1" width="9.9" height="10.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ecd5 @ 0x0061ecd5
-182 bytes — Classified (class/role known)</title></rect>
-<rect x="1331.8" y="803.6" width="9.9" height="10.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628b6f @ 0x00628b6f
-177 bytes — Classified (class/role known)</title></rect>
+<rect x="1331.8" y="750.4" width="9.9" height="10.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62eebc @ 0x0062eebc
+188 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1331.8" y="761.3" width="9.9" height="10.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620362 @ 0x00620362
+185 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1331.8" y="771.9" width="9.9" height="10.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629c92 @ 0x00629c92
+185 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1331.8" y="782.6" width="9.9" height="10.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b706 @ 0x0062b706
+182 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1331.8" y="793.1" width="9.9" height="10.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ecd5 @ 0x0061ecd5
+182 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1331.8" y="803.6" width="9.9" height="10.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628b6f @ 0x00628b6f
+177 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1331.8" y="813.9" width="9.9" height="10.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cc17 @ 0x0061cc17
 177 bytes — Classified (class/role known)</title></rect>
-<rect x="1331.8" y="824.1" width="9.9" height="10.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c602 @ 0x0061c602
-176 bytes — Classified (class/role known)</title></rect>
+<rect x="1331.8" y="824.1" width="9.9" height="10.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c602 @ 0x0061c602
+176 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1331.8" y="834.2" width="9.9" height="10" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61daae @ 0x0061daae
 174 bytes — Classified (class/role known)</title></rect>
 <rect x="1341.7" y="728.6" width="10" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61dc8f @ 0x0061dc8f
 171 bytes — Classified (class/role known)</title></rect>
 <rect x="1351.7" y="728.6" width="9.9" height="9.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__alldiv @ 0x006226f0
 170 bytes — Identified (purpose known)</title></rect>
-<rect x="1361.6" y="728.6" width="9.9" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623ea0 @ 0x00623ea0
-170 bytes — Classified (class/role known)</title></rect>
+<rect x="1361.6" y="728.6" width="9.9" height="9.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623ea0 @ 0x00623ea0
+170 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1371.6" y="728.6" width="9.8" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622b89 @ 0x00622b89
 167 bytes — Classified (class/role known)</title></rect>
-<rect x="1381.3" y="728.6" width="9.8" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624852 @ 0x00624852
-167 bytes — Classified (class/role known)</title></rect>
-<rect x="1391.1" y="728.6" width="9.6" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f0b9 @ 0x0061f0b9
-165 bytes — Classified (class/role known)</title></rect>
+<rect x="1381.3" y="728.6" width="9.8" height="9.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624852 @ 0x00624852
+167 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1391.1" y="728.6" width="9.6" height="9.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f0b9 @ 0x0061f0b9
+165 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1400.7" y="728.6" width="9.6" height="9.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_memchr @ 0x0061f3b0
 165 bytes — Identified (purpose known)</title></rect>
 <rect x="1410.3" y="728.6" width="9.6" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61db6f @ 0x0061db6f
 164 bytes — Classified (class/role known)</title></rect>
 <rect x="1419.9" y="728.6" width="9.5" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a789 @ 0x0062a789
 163 bytes — Classified (class/role known)</title></rect>
-<rect x="1429.4" y="728.6" width="9.3" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6229a1 @ 0x006229a1
-160 bytes — Classified (class/role known)</title></rect>
-<rect x="1438.8" y="728.6" width="9.3" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d6ec @ 0x0061d6ec
-159 bytes — Classified (class/role known)</title></rect>
-<rect x="1448.1" y="728.6" width="9.2" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623fa7 @ 0x00623fa7
-158 bytes — Classified (class/role known)</title></rect>
-<rect x="1341.7" y="738.4" width="8.9" height="10" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622805 @ 0x00622805
-156 bytes — Classified (class/role known)</title></rect>
+<rect x="1429.4" y="728.6" width="9.3" height="9.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6229a1 @ 0x006229a1
+160 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1438.8" y="728.6" width="9.3" height="9.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d6ec @ 0x0061d6ec
+159 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1448.1" y="728.6" width="9.2" height="9.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623fa7 @ 0x00623fa7
+158 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1341.7" y="738.4" width="8.9" height="10" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622805 @ 0x00622805
+156 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1341.7" y="748.4" width="8.9" height="10" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61e6e3 @ 0x0061e6e3
 156 bytes — Classified (class/role known)</title></rect>
-<rect x="1341.7" y="758.4" width="8.9" height="9.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623c52 @ 0x00623c52
-155 bytes — Classified (class/role known)</title></rect>
-<rect x="1341.7" y="768.4" width="8.9" height="9.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629d4b @ 0x00629d4b
-153 bytes — Classified (class/role known)</title></rect>
+<rect x="1341.7" y="758.4" width="8.9" height="9.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623c52 @ 0x00623c52
+155 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1341.7" y="768.4" width="8.9" height="9.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629d4b @ 0x00629d4b
+153 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1341.7" y="778.2" width="8.9" height="9.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b8f4 @ 0x0062b8f4
 151 bytes — Classified (class/role known)</title></rect>
 <rect x="1341.7" y="787.8" width="8.9" height="9.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d1cb @ 0x0061d1cb
 150 bytes — Classified (class/role known)</title></rect>
-<rect x="1341.7" y="797.4" width="8.9" height="9.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6248f9 @ 0x006248f9
-147 bytes — Classified (class/role known)</title></rect>
-<rect x="1341.7" y="806.9" width="8.9" height="9.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62aaa7 @ 0x0062aaa7
-147 bytes — Classified (class/role known)</title></rect>
-<rect x="1341.7" y="816.3" width="8.9" height="9.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62aff2 @ 0x0062aff2
-146 bytes — Classified (class/role known)</title></rect>
+<rect x="1341.7" y="797.4" width="8.9" height="9.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6248f9 @ 0x006248f9
+147 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1341.7" y="806.9" width="8.9" height="9.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62aaa7 @ 0x0062aaa7
+147 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1341.7" y="816.3" width="8.9" height="9.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62aff2 @ 0x0062aff2
+146 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1341.7" y="825.6" width="8.9" height="9.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d2a1 @ 0x0062d2a1
 146 bytes — Classified (class/role known)</title></rect>
 <rect x="1341.7" y="835" width="8.9" height="9.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61febf @ 0x0061febf
@@ -33165,114 +33177,114 @@
 141 bytes — Classified (class/role known)</title></rect>
 <rect x="1350.6" y="747.5" width="8.9" height="9.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6280b0 @ 0x006280b0
 141 bytes — Classified (class/role known)</title></rect>
-<rect x="1350.6" y="756.6" width="8.9" height="9.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b3b4 @ 0x0062b3b4
-141 bytes — Classified (class/role known)</title></rect>
-<rect x="1350.6" y="765.6" width="8.9" height="9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b2e6 @ 0x0062b2e6
-140 bytes — Classified (class/role known)</title></rect>
+<rect x="1350.6" y="756.6" width="8.9" height="9.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b3b4 @ 0x0062b3b4
+141 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1350.6" y="765.6" width="8.9" height="9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b2e6 @ 0x0062b2e6
+140 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1350.6" y="774.6" width="8.9" height="8.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f312 @ 0x0061f312
 139 bytes — Classified (class/role known)</title></rect>
-<rect x="1350.6" y="783.6" width="8.9" height="8.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b084 @ 0x0062b084
-137 bytes — Classified (class/role known)</title></rect>
+<rect x="1350.6" y="783.6" width="8.9" height="8.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b084 @ 0x0062b084
+137 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1350.6" y="792.4" width="8.9" height="8.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__setjmp3 @ 0x00621d18
 136 bytes — Identified (purpose known)</title></rect>
 <rect x="1350.6" y="801.1" width="8.9" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c6db @ 0x0061c6db
 136 bytes — Classified (class/role known)</title></rect>
-<rect x="1350.6" y="809.9" width="8.9" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6275f5 @ 0x006275f5
-135 bytes — Classified (class/role known)</title></rect>
-<rect x="1350.6" y="818.6" width="8.9" height="8.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6279ca @ 0x006279ca
-134 bytes — Classified (class/role known)</title></rect>
+<rect x="1350.6" y="809.9" width="8.9" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6275f5 @ 0x006275f5
+135 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1350.6" y="818.6" width="8.9" height="8.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6279ca @ 0x006279ca
+134 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1350.6" y="827.2" width="8.9" height="8.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61ccc8 @ 0x0061ccc8
 134 bytes — Classified (class/role known)</title></rect>
 <rect x="1350.6" y="835.8" width="8.9" height="8.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_strcmp @ 0x00624ab0
 132 bytes — Identified (purpose known)</title></rect>
-<rect x="1359.5" y="738.4" width="8.6" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622d28 @ 0x00622d28
-131 bytes — Classified (class/role known)</title></rect>
-<rect x="1368.1" y="738.4" width="8.3" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62acd9 @ 0x0062acd9
-127 bytes — Classified (class/role known)</title></rect>
-<rect x="1376.4" y="738.4" width="8.2" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61e794 @ 0x0061e794
-126 bytes — Classified (class/role known)</title></rect>
-<rect x="1384.6" y="738.4" width="8.2" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62bec3 @ 0x0062bec3
-125 bytes — Classified (class/role known)</title></rect>
-<rect x="1392.8" y="738.4" width="8.1" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ac5d @ 0x0062ac5d
-124 bytes — Classified (class/role known)</title></rect>
+<rect x="1359.5" y="738.4" width="8.6" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622d28 @ 0x00622d28
+131 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1368.1" y="738.4" width="8.3" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62acd9 @ 0x0062acd9
+127 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1376.4" y="738.4" width="8.2" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61e794 @ 0x0061e794
+126 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1384.6" y="738.4" width="8.2" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62bec3 @ 0x0062bec3
+125 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1392.8" y="738.4" width="8.1" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ac5d @ 0x0062ac5d
+124 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1400.9" y="738.4" width="8.1" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c4f0 @ 0x0061c4f0
 124 bytes — Classified (class/role known)</title></rect>
 <rect x="1409" y="738.4" width="8.1" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61dc13 @ 0x0061dc13
 124 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.1" y="738.4" width="8.1" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e952 @ 0x0062e952
-124 bytes — Classified (class/role known)</title></rect>
-<rect x="1425.2" y="738.4" width="8.1" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ee00 @ 0x0061ee00
-124 bytes — Classified (class/role known)</title></rect>
+<rect x="1417.1" y="738.4" width="8.1" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e952 @ 0x0062e952
+124 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1425.2" y="738.4" width="8.1" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ee00 @ 0x0061ee00
+124 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1433.3" y="738.4" width="8" height="8.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_strlen @ 0x00622c50
 123 bytes — Identified (purpose known)</title></rect>
-<rect x="1441.3" y="738.4" width="8" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624045 @ 0x00624045
-123 bytes — Classified (class/role known)</title></rect>
-<rect x="1449.4" y="738.4" width="7.9" height="8.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e476 @ 0x0061e476
-121 bytes — Classified (class/role known)</title></rect>
-<rect x="1359.5" y="747.2" width="8.3" height="8.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62418d @ 0x0062418d
-120 bytes — Classified (class/role known)</title></rect>
+<rect x="1441.3" y="738.4" width="8" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624045 @ 0x00624045
+123 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1449.4" y="738.4" width="7.9" height="8.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e476 @ 0x0061e476
+121 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1359.5" y="747.2" width="8.3" height="8.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62418d @ 0x0062418d
+120 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1359.5" y="755.5" width="8.3" height="8.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62079d @ 0x0062079d
 119 bytes — Classified (class/role known)</title></rect>
-<rect x="1359.5" y="763.7" width="8.3" height="8.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b633 @ 0x0062b633
-119 bytes — Classified (class/role known)</title></rect>
-<rect x="1359.5" y="771.9" width="8.3" height="8.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e310 @ 0x0061e310
-118 bytes — Classified (class/role known)</title></rect>
+<rect x="1359.5" y="763.7" width="8.3" height="8.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b633 @ 0x0062b633
+119 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1359.5" y="771.9" width="8.3" height="8.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e310 @ 0x0061e310
+118 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1359.5" y="780.1" width="8.3" height="8.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6256cf @ 0x006256cf
 117 bytes — Classified (class/role known)</title></rect>
 <rect x="1359.5" y="788.1" width="8.3" height="8.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__aullrem @ 0x00628010
 117 bytes — Identified (purpose known)</title></rect>
-<rect x="1359.5" y="796.2" width="8.3" height="8.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e1b2 @ 0x0061e1b2
-117 bytes — Classified (class/role known)</title></rect>
-<rect x="1359.5" y="804.3" width="8.3" height="8.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ed8b @ 0x0061ed8b
-117 bytes — Classified (class/role known)</title></rect>
-<rect x="1359.5" y="812.4" width="8.3" height="8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c58e @ 0x0061c58e
-116 bytes — Classified (class/role known)</title></rect>
+<rect x="1359.5" y="796.2" width="8.3" height="8.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e1b2 @ 0x0061e1b2
+117 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1359.5" y="804.3" width="8.3" height="8.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ed8b @ 0x0061ed8b
+117 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1359.5" y="812.4" width="8.3" height="8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c58e @ 0x0061c58e
+116 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1359.5" y="820.4" width="8.3" height="8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f20a @ 0x0061f20a
 116 bytes — Classified (class/role known)</title></rect>
-<rect x="1359.5" y="828.4" width="8.3" height="7.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62323e @ 0x0062323e
-115 bytes — Classified (class/role known)</title></rect>
-<rect x="1359.5" y="836.3" width="8.3" height="7.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6254ba @ 0x006254ba
-115 bytes — Classified (class/role known)</title></rect>
+<rect x="1359.5" y="828.4" width="8.3" height="7.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62323e @ 0x0062323e
+115 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1359.5" y="836.3" width="8.3" height="7.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6254ba @ 0x006254ba
+115 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1367.8" y="747.2" width="8.5" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f783 @ 0x0061f783
 114 bytes — Classified (class/role known)</title></rect>
 <rect x="1376.3" y="747.2" width="8.3" height="7.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__aulldiv @ 0x00627fa0
 112 bytes — Identified (purpose known)</title></rect>
-<rect x="1384.6" y="747.2" width="8.3" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620d57 @ 0x00620d57
-111 bytes — Classified (class/role known)</title></rect>
-<rect x="1392.9" y="747.2" width="8.3" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b10d @ 0x0062b10d
-111 bytes — Classified (class/role known)</title></rect>
+<rect x="1384.6" y="747.2" width="8.3" height="7.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620d57 @ 0x00620d57
+111 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1392.9" y="747.2" width="8.3" height="7.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b10d @ 0x0062b10d
+111 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1401.1" y="747.2" width="8.2" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c1af @ 0x0062c1af
 110 bytes — Classified (class/role known)</title></rect>
-<rect x="1409.3" y="747.2" width="8.2" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62df0b @ 0x0062df0b
-110 bytes — Classified (class/role known)</title></rect>
+<rect x="1409.3" y="747.2" width="8.2" height="7.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62df0b @ 0x0062df0b
+110 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1417.5" y="747.2" width="8" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d42a @ 0x0061d42a
 108 bytes — Classified (class/role known)</title></rect>
-<rect x="1425.5" y="747.2" width="8" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d5b0 @ 0x0061d5b0
-108 bytes — Classified (class/role known)</title></rect>
+<rect x="1425.5" y="747.2" width="8" height="7.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d5b0 @ 0x0061d5b0
+108 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1433.6" y="747.2" width="8" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62279a @ 0x0062279a
 107 bytes — Classified (class/role known)</title></rect>
 <rect x="1441.5" y="747.2" width="7.9" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d496 @ 0x0061d496
 106 bytes — Classified (class/role known)</title></rect>
 <rect x="1449.4" y="747.2" width="7.9" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ff7f @ 0x0061ff7f
 106 bytes — Classified (class/role known)</title></rect>
-<rect x="1367.8" y="754.9" width="7.9" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b88b @ 0x0062b88b
-105 bytes — Classified (class/role known)</title></rect>
+<rect x="1367.8" y="754.9" width="7.9" height="7.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b88b @ 0x0062b88b
+105 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1367.8" y="762.5" width="7.9" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d3c2 @ 0x0061d3c2
 104 bytes — Classified (class/role known)</title></rect>
 <rect x="1367.8" y="770" width="7.9" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d548 @ 0x0061d548
 104 bytes — Classified (class/role known)</title></rect>
-<rect x="1367.8" y="777.5" width="7.9" height="7.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__local_unwind2 @ 0x0061eebe
-104 bytes — Identified (purpose known)</title></rect>
+<rect x="1367.8" y="777.5" width="7.9" height="7.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__local_unwind2 @ 0x0061eebe
+104 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1367.8" y="785.1" width="7.9" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f18a @ 0x0061f18a
 104 bytes — Classified (class/role known)</title></rect>
-<rect x="1367.8" y="792.6" width="7.9" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62293a @ 0x0062293a
-103 bytes — Classified (class/role known)</title></rect>
-<rect x="1367.8" y="800" width="7.9" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6243c9 @ 0x006243c9
-103 bytes — Classified (class/role known)</title></rect>
-<rect x="1367.8" y="807.5" width="7.9" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ee55 @ 0x0062ee55
-103 bytes — Classified (class/role known)</title></rect>
-<rect x="1367.8" y="815" width="7.9" height="7.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627a6a @ 0x00627a6a
-102 bytes — Classified (class/role known)</title></rect>
+<rect x="1367.8" y="792.6" width="7.9" height="7.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62293a @ 0x0062293a
+103 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1367.8" y="800" width="7.9" height="7.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6243c9 @ 0x006243c9
+103 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1367.8" y="807.5" width="7.9" height="7.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ee55 @ 0x0062ee55
+103 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1367.8" y="815" width="7.9" height="7.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627a6a @ 0x00627a6a
+102 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1367.8" y="822.3" width="7.9" height="7.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622b24 @ 0x00622b24
 101 bytes — Classified (class/role known)</title></rect>
 <rect x="1367.8" y="829.7" width="7.9" height="7.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622dab @ 0x00622dab
@@ -33283,34 +33295,34 @@
 101 bytes — Classified (class/role known)</title></rect>
 <rect x="1383.2" y="754.9" width="7.6" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a95c @ 0x0062a95c
 101 bytes — Classified (class/role known)</title></rect>
-<rect x="1390.8" y="754.9" width="7.6" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c78e @ 0x0061c78e
-101 bytes — Classified (class/role known)</title></rect>
+<rect x="1390.8" y="754.9" width="7.6" height="7.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c78e @ 0x0061c78e
+101 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1398.4" y="754.9" width="7.5" height="7.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>___timet_from_ft @ 0x00621293
 100 bytes — Identified (purpose known)</title></rect>
-<rect x="1405.8" y="754.9" width="7.5" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624b34 @ 0x00624b34
-100 bytes — Classified (class/role known)</title></rect>
+<rect x="1405.8" y="754.9" width="7.5" height="7.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624b34 @ 0x00624b34
+100 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1413.3" y="754.9" width="7.5" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61e554 @ 0x0061e554
 100 bytes — Classified (class/role known)</title></rect>
-<rect x="1420.8" y="754.9" width="7.4" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cea8 @ 0x0061cea8
-99 bytes — Classified (class/role known)</title></rect>
-<rect x="1428.2" y="754.9" width="7.3" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627aef @ 0x00627aef
-98 bytes — Classified (class/role known)</title></rect>
-<rect x="1435.5" y="754.9" width="7.3" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623a74 @ 0x00623a74
-97 bytes — Classified (class/role known)</title></rect>
+<rect x="1420.8" y="754.9" width="7.4" height="7.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cea8 @ 0x0061cea8
+99 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1428.2" y="754.9" width="7.3" height="7.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627aef @ 0x00627aef
+98 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1435.5" y="754.9" width="7.3" height="7.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623a74 @ 0x00623a74
+97 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1442.8" y="754.9" width="7.3" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6244ac @ 0x006244ac
 97 bytes — Classified (class/role known)</title></rect>
-<rect x="1450" y="754.9" width="7.3" height="7.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6246da @ 0x006246da
-97 bytes — Classified (class/role known)</title></rect>
-<rect x="1375.7" y="762.5" width="7.7" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624a2b @ 0x00624a2b
-97 bytes — Classified (class/role known)</title></rect>
+<rect x="1450" y="754.9" width="7.3" height="7.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6246da @ 0x006246da
+97 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1375.7" y="762.5" width="7.7" height="7.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624a2b @ 0x00624a2b
+97 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1383.3" y="762.5" width="7.5" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627e71 @ 0x00627e71
 95 bytes — Classified (class/role known)</title></rect>
-<rect x="1390.8" y="762.5" width="7.5" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ad9a @ 0x0062ad9a
-95 bytes — Classified (class/role known)</title></rect>
-<rect x="1398.3" y="762.5" width="7.4" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c82d @ 0x0061c82d
-94 bytes — Classified (class/role known)</title></rect>
-<rect x="1405.8" y="762.5" width="7.4" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cb24 @ 0x0061cb24
-94 bytes — Classified (class/role known)</title></rect>
+<rect x="1390.8" y="762.5" width="7.5" height="7.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ad9a @ 0x0062ad9a
+95 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1398.3" y="762.5" width="7.4" height="7.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c82d @ 0x0061c82d
+94 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1405.8" y="762.5" width="7.4" height="7.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cb24 @ 0x0061cb24
+94 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1413.2" y="762.5" width="7.4" height="7.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>___add_12 @ 0x0062d513
 94 bytes — Identified (purpose known)</title></rect>
 <rect x="1420.6" y="762.5" width="7.3" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620677 @ 0x00620677
@@ -33319,50 +33331,50 @@
 93 bytes — Classified (class/role known)</title></rect>
 <rect x="1435.3" y="762.5" width="7.3" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622587 @ 0x00622587
 93 bytes — Classified (class/role known)</title></rect>
-<rect x="1442.6" y="762.5" width="7.3" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622ccb @ 0x00622ccb
-93 bytes — Classified (class/role known)</title></rect>
-<rect x="1449.9" y="762.5" width="7.3" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623f4a @ 0x00623f4a
-93 bytes — Classified (class/role known)</title></rect>
+<rect x="1442.6" y="762.5" width="7.3" height="7.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622ccb @ 0x00622ccb
+93 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1449.9" y="762.5" width="7.3" height="7.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623f4a @ 0x00623f4a
+93 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1375.7" y="769.7" width="6.9" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621324 @ 0x00621324
 92 bytes — Classified (class/role known)</title></rect>
-<rect x="1375.7" y="777.4" width="6.9" height="7.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b6aa @ 0x0062b6aa
-92 bytes — Classified (class/role known)</title></rect>
+<rect x="1375.7" y="777.4" width="6.9" height="7.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b6aa @ 0x0062b6aa
+92 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1375.7" y="785.1" width="6.9" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d174 @ 0x0062d174
 90 bytes — Classified (class/role known)</title></rect>
 <rect x="1375.7" y="792.6" width="6.9" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fb6d @ 0x0061fb6d
 90 bytes — Classified (class/role known)</title></rect>
 <rect x="1375.7" y="800.1" width="6.9" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__fload_withFB @ 0x0062a6e5
 89 bytes — Identified (purpose known)</title></rect>
-<rect x="1375.7" y="807.5" width="6.9" height="7.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b832 @ 0x0062b832
-89 bytes — Classified (class/role known)</title></rect>
-<rect x="1375.7" y="814.9" width="6.9" height="7.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62759d @ 0x0062759d
-88 bytes — Classified (class/role known)</title></rect>
+<rect x="1375.7" y="807.5" width="6.9" height="7.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b832 @ 0x0062b832
+89 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1375.7" y="814.9" width="6.9" height="7.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62759d @ 0x0062759d
+88 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1375.7" y="822.3" width="6.9" height="7.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_memset @ 0x00627cd0
 88 bytes — Identified (purpose known)</title></rect>
-<rect x="1375.7" y="829.6" width="6.9" height="7.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629c3a @ 0x00629c3a
-88 bytes — Classified (class/role known)</title></rect>
+<rect x="1375.7" y="829.6" width="6.9" height="7.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629c3a @ 0x00629c3a
+88 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1375.7" y="836.9" width="6.9" height="7.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d2f2 @ 0x0061d2f2
 88 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="769.7" width="7.2" height="7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62edfd @ 0x0062edfd
-88 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="776.8" width="7.2" height="6.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62450d @ 0x0062450d
-86 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="783.6" width="7.2" height="6.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627880 @ 0x00627880
-86 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="790.5" width="7.2" height="6.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b290 @ 0x0062b290
-86 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="797.3" width="7.2" height="6.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e6dc @ 0x0062e6dc
-86 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="804.2" width="7.2" height="6.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6247fd @ 0x006247fd
-85 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="811" width="7.2" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6228d3 @ 0x006228d3
-84 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="817.7" width="7.2" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ec5c @ 0x0061ec5c
-84 bytes — Classified (class/role known)</title></rect>
+<rect x="1382.5" y="769.7" width="7.2" height="7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62edfd @ 0x0062edfd
+88 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1382.5" y="776.8" width="7.2" height="6.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62450d @ 0x0062450d
+86 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1382.5" y="783.6" width="7.2" height="6.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627880 @ 0x00627880
+86 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1382.5" y="790.5" width="7.2" height="6.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b290 @ 0x0062b290
+86 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1382.5" y="797.3" width="7.2" height="6.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e6dc @ 0x0062e6dc
+86 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1382.5" y="804.2" width="7.2" height="6.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6247fd @ 0x006247fd
+85 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1382.5" y="811" width="7.2" height="6.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6228d3 @ 0x006228d3
+84 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1382.5" y="817.7" width="7.2" height="6.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ec5c @ 0x0061ec5c
+84 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1382.5" y="824.4" width="7.2" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fe44 @ 0x0061fe44
 84 bytes — Classified (class/role known)</title></rect>
-<rect x="1382.5" y="831" width="7.2" height="6.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620624 @ 0x00620624
-83 bytes — Classified (class/role known)</title></rect>
+<rect x="1382.5" y="831" width="7.2" height="6.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620624 @ 0x00620624
+83 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1382.5" y="837.7" width="7.2" height="6.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d29f @ 0x0061d29f
 83 bytes — Classified (class/role known)</title></rect>
 <rect x="1389.7" y="769.7" width="7" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f27e @ 0x0061f27e
@@ -33373,42 +33385,42 @@
 81 bytes — Identified (purpose known)</title></rect>
 <rect x="1410.6" y="769.7" width="6.8" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62567f @ 0x0062567f
 80 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.4" y="769.7" width="6.8" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ebd7 @ 0x0061ebd7
-79 bytes — Classified (class/role known)</title></rect>
-<rect x="1424.2" y="769.7" width="6.7" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6217c2 @ 0x006217c2
-78 bytes — Classified (class/role known)</title></rect>
-<rect x="1430.9" y="769.7" width="6.7" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627017 @ 0x00627017
-78 bytes — Classified (class/role known)</title></rect>
+<rect x="1417.4" y="769.7" width="6.8" height="6.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ebd7 @ 0x0061ebd7
+79 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1424.2" y="769.7" width="6.7" height="6.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6217c2 @ 0x006217c2
+78 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1430.9" y="769.7" width="6.7" height="6.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627017 @ 0x00627017
+78 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1437.5" y="769.7" width="6.7" height="6.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>atexit @ 0x0061e812
 78 bytes — Identified (purpose known)</title></rect>
-<rect x="1444.2" y="769.7" width="6.6" height="6.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e227 @ 0x0061e227
-77 bytes — Classified (class/role known)</title></rect>
-<rect x="1450.8" y="769.7" width="6.5" height="6.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__fclose_lk @ 0x0062148a
-76 bytes — Identified (purpose known)</title></rect>
-<rect x="1389.7" y="776.4" width="7" height="6.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__CallSettingFrame_12 @ 0x00624460
-76 bytes — Identified (purpose known)</title></rect>
-<rect x="1396.7" y="776.4" width="7" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e274 @ 0x0061e274
-76 bytes — Classified (class/role known)</title></rect>
+<rect x="1444.2" y="769.7" width="6.6" height="6.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e227 @ 0x0061e227
+77 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1450.8" y="769.7" width="6.5" height="6.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__fclose_lk @ 0x0062148a
+76 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1389.7" y="776.4" width="7" height="6.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__CallSettingFrame_12 @ 0x00624460
+76 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1396.7" y="776.4" width="7" height="6.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e274 @ 0x0061e274
+76 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1403.6" y="776.4" width="6.9" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a73e @ 0x0062a73e
 75 bytes — Classified (class/role known)</title></rect>
 <rect x="1410.5" y="776.4" width="6.8" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621600 @ 0x00621600
 74 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.3" y="776.4" width="6.8" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62607f @ 0x0062607f
-74 bytes — Classified (class/role known)</title></rect>
-<rect x="1424" y="776.4" width="6.7" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620dc6 @ 0x00620dc6
-73 bytes — Classified (class/role known)</title></rect>
-<rect x="1430.7" y="776.4" width="6.7" height="6.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__startOneArgErrorHandling @ 0x0062a657
-73 bytes — Identified (purpose known)</title></rect>
-<rect x="1437.4" y="776.4" width="6.7" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b247 @ 0x0062b247
-73 bytes — Classified (class/role known)</title></rect>
+<rect x="1417.3" y="776.4" width="6.8" height="6.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62607f @ 0x0062607f
+74 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1424" y="776.4" width="6.7" height="6.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620dc6 @ 0x00620dc6
+73 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1430.7" y="776.4" width="6.7" height="6.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__startOneArgErrorHandling @ 0x0062a657
+73 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1437.4" y="776.4" width="6.7" height="6.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b247 @ 0x0062b247
+73 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1444.1" y="776.4" width="6.6" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621b7e @ 0x00621b7e
 72 bytes — Classified (class/role known)</title></rect>
 <rect x="1450.7" y="776.4" width="6.6" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d500 @ 0x0061d500
 72 bytes — Classified (class/role known)</title></rect>
 <rect x="1389.7" y="782.7" width="6.3" height="6.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f874 @ 0x0061f874
 70 bytes — Classified (class/role known)</title></rect>
-<rect x="1389.7" y="789" width="6.3" height="6.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623c0d @ 0x00623c0d
-69 bytes — Classified (class/role known)</title></rect>
+<rect x="1389.7" y="789" width="6.3" height="6.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_623c0d @ 0x00623c0d
+69 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1389.7" y="795.3" width="6.3" height="6.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61ca14 @ 0x0061ca14
 69 bytes — Classified (class/role known)</title></rect>
 <rect x="1389.7" y="801.6" width="6.3" height="6.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d626 @ 0x0061d626
@@ -33419,288 +33431,288 @@
 68 bytes — Classified (class/role known)</title></rect>
 <rect x="1389.7" y="820.2" width="6.3" height="6.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d34a @ 0x0061d34a
 67 bytes — Classified (class/role known)</title></rect>
-<rect x="1389.7" y="826.3" width="6.3" height="6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ad58 @ 0x0062ad58
-66 bytes — Classified (class/role known)</title></rect>
+<rect x="1389.7" y="826.3" width="6.3" height="6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ad58 @ 0x0062ad58
+66 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1389.7" y="832.3" width="6.3" height="6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cdba @ 0x0061cdba
 66 bytes — Classified (class/role known)</title></rect>
-<rect x="1389.7" y="838.3" width="6.3" height="6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__global_unwind2 @ 0x0061ee7c
-66 bytes — Identified (purpose known)</title></rect>
+<rect x="1389.7" y="838.3" width="6.3" height="6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__global_unwind2 @ 0x0061ee7c
+66 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1396" y="782.7" width="6.3" height="5.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__allmul @ 0x00622a60
 64 bytes — Identified (purpose known)</title></rect>
-<rect x="1402.3" y="782.7" width="6.3" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6272b0 @ 0x006272b0
-64 bytes — Classified (class/role known)</title></rect>
-<rect x="1408.5" y="782.7" width="6.3" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6272f0 @ 0x006272f0
-64 bytes — Classified (class/role known)</title></rect>
-<rect x="1414.8" y="782.7" width="6.2" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61deb0 @ 0x0061deb0
-63 bytes — Classified (class/role known)</title></rect>
+<rect x="1402.3" y="782.7" width="6.3" height="5.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6272b0 @ 0x006272b0
+64 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1408.5" y="782.7" width="6.3" height="5.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6272f0 @ 0x006272f0
+64 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1414.8" y="782.7" width="6.2" height="5.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61deb0 @ 0x0061deb0
+63 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1421" y="782.7" width="6.2" height="5.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__mbsnbicoll @ 0x0062decc
 63 bytes — Identified (purpose known)</title></rect>
-<rect x="1427.1" y="782.7" width="6.1" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624575 @ 0x00624575
-62 bytes — Classified (class/role known)</title></rect>
+<rect x="1427.1" y="782.7" width="6.1" height="5.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624575 @ 0x00624575
+62 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1433.2" y="782.7" width="6.1" height="5.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__fassign @ 0x0062469c
 62 bytes — Identified (purpose known)</title></rect>
-<rect x="1439.3" y="782.7" width="6.1" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6284d2 @ 0x006284d2
-62 bytes — Classified (class/role known)</title></rect>
+<rect x="1439.3" y="782.7" width="6.1" height="5.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6284d2 @ 0x006284d2
+62 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1445.3" y="782.7" width="6" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6215c3 @ 0x006215c3
 61 bytes — Classified (class/role known)</title></rect>
 <rect x="1451.3" y="782.7" width="6" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d4b5 @ 0x0062d4b5
 61 bytes — Classified (class/role known)</title></rect>
 <rect x="1396" y="788.5" width="5.9" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6214d6 @ 0x006214d6
 60 bytes — Classified (class/role known)</title></rect>
-<rect x="1396" y="794.3" width="5.9" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628496 @ 0x00628496
-60 bytes — Classified (class/role known)</title></rect>
-<rect x="1396" y="800.2" width="5.9" height="5.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629c00 @ 0x00629c00
-58 bytes — Classified (class/role known)</title></rect>
+<rect x="1396" y="794.3" width="5.9" height="5.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628496 @ 0x00628496
+60 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1396" y="800.2" width="5.9" height="5.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629c00 @ 0x00629c00
+58 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1396" y="805.8" width="5.9" height="5.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__CxxThrowException_8 @ 0x0061f027
 58 bytes — Identified (purpose known)</title></rect>
-<rect x="1396" y="811.5" width="5.9" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627c6d @ 0x00627c6d
-57 bytes — Classified (class/role known)</title></rect>
-<rect x="1396" y="817" width="5.9" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a0ca @ 0x0062a0ca
-57 bytes — Classified (class/role known)</title></rect>
+<rect x="1396" y="811.5" width="5.9" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627c6d @ 0x00627c6d
+57 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1396" y="817" width="5.9" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a0ca @ 0x0062a0ca
+57 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1396" y="822.6" width="5.9" height="5.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_strncmp @ 0x006213d0
 56 bytes — Identified (purpose known)</title></rect>
 <rect x="1396" y="828" width="5.9" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625457 @ 0x00625457
 56 bytes — Classified (class/role known)</title></rect>
-<rect x="1396" y="833.5" width="5.9" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ef81 @ 0x0061ef81
-56 bytes — Classified (class/role known)</title></rect>
-<rect x="1396" y="838.9" width="5.9" height="5.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627993 @ 0x00627993
-55 bytes — Classified (class/role known)</title></rect>
+<rect x="1396" y="833.5" width="5.9" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ef81 @ 0x0061ef81
+56 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1396" y="838.9" width="5.9" height="5.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627993 @ 0x00627993
+55 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1401.9" y="788.5" width="5.7" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629a36 @ 0x00629a36
 55 bytes — Classified (class/role known)</title></rect>
-<rect x="1407.6" y="788.5" width="5.7" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61caec @ 0x0061caec
-55 bytes — Classified (class/role known)</title></rect>
-<rect x="1413.3" y="788.5" width="5.6" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627b51 @ 0x00627b51
-54 bytes — Classified (class/role known)</title></rect>
-<rect x="1419" y="788.5" width="5.6" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ec26 @ 0x0061ec26
-54 bytes — Classified (class/role known)</title></rect>
+<rect x="1407.6" y="788.5" width="5.7" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61caec @ 0x0061caec
+55 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1413.3" y="788.5" width="5.6" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627b51 @ 0x00627b51
+54 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1419" y="788.5" width="5.6" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ec26 @ 0x0061ec26
+54 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1424.6" y="788.5" width="5.5" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6253f1 @ 0x006253f1
 53 bytes — Classified (class/role known)</title></rect>
-<rect x="1430.1" y="788.5" width="5.5" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62afa7 @ 0x0062afa7
-53 bytes — Classified (class/role known)</title></rect>
-<rect x="1435.6" y="788.5" width="5.5" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d38d @ 0x0061d38d
-53 bytes — Classified (class/role known)</title></rect>
+<rect x="1430.1" y="788.5" width="5.5" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62afa7 @ 0x0062afa7
+53 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1435.6" y="788.5" width="5.5" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d38d @ 0x0061d38d
+53 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1441.1" y="788.5" width="5.4" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621a4c @ 0x00621a4c
 52 bytes — Classified (class/role known)</title></rect>
-<rect x="1446.6" y="788.5" width="5.4" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61eb95 @ 0x0061eb95
-52 bytes — Classified (class/role known)</title></rect>
-<rect x="1452" y="788.5" width="5.3" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6260c9 @ 0x006260c9
-51 bytes — Classified (class/role known)</title></rect>
-<rect x="1401.9" y="794" width="5.5" height="5.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6228a1 @ 0x006228a1
-50 bytes — Classified (class/role known)</title></rect>
+<rect x="1446.6" y="788.5" width="5.4" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61eb95 @ 0x0061eb95
+52 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1452" y="788.5" width="5.3" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6260c9 @ 0x006260c9
+51 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1401.9" y="794" width="5.5" height="5.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6228a1 @ 0x006228a1
+50 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1401.9" y="799.2" width="5.5" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621459 @ 0x00621459
 49 bytes — Classified (class/role known)</title></rect>
 <rect x="1401.9" y="804.3" width="5.5" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621512 @ 0x00621512
 49 bytes — Classified (class/role known)</title></rect>
 <rect x="1401.9" y="809.4" width="5.5" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625426 @ 0x00625426
 49 bytes — Classified (class/role known)</title></rect>
-<rect x="1401.9" y="814.5" width="5.5" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c22e @ 0x0062c22e
-49 bytes — Classified (class/role known)</title></rect>
-<rect x="1401.9" y="819.5" width="5.5" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624430 @ 0x00624430
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1401.9" y="814.5" width="5.5" height="5.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c22e @ 0x0062c22e
+49 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1401.9" y="819.5" width="5.5" height="5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624430 @ 0x00624430
+48 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1401.9" y="824.5" width="5.5" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a6b5 @ 0x0062a6b5
 48 bytes — Classified (class/role known)</title></rect>
-<rect x="1401.9" y="829.5" width="5.5" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e0be @ 0x0061e0be
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1401.9" y="829.5" width="5.5" height="5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e0be @ 0x0061e0be
+48 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1401.9" y="834.5" width="5.5" height="4.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62166d @ 0x0062166d
 47 bytes — Classified (class/role known)</title></rect>
-<rect x="1401.9" y="839.4" width="5.5" height="4.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6220f5 @ 0x006220f5
-47 bytes — Classified (class/role known)</title></rect>
-<rect x="1407.4" y="794" width="5" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622147 @ 0x00622147
-47 bytes — Classified (class/role known)</title></rect>
-<rect x="1412.4" y="794" width="5" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622514 @ 0x00622514
-47 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.5" y="794" width="5" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622ac7 @ 0x00622ac7
-47 bytes — Classified (class/role known)</title></rect>
-<rect x="1422.5" y="794" width="5" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cbe8 @ 0x0061cbe8
-47 bytes — Classified (class/role known)</title></rect>
+<rect x="1401.9" y="839.4" width="5.5" height="4.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6220f5 @ 0x006220f5
+47 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1407.4" y="794" width="5" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622147 @ 0x00622147
+47 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1412.4" y="794" width="5" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622514 @ 0x00622514
+47 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1417.5" y="794" width="5" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622ac7 @ 0x00622ac7
+47 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1422.5" y="794" width="5" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cbe8 @ 0x0061cbe8
+47 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1427.5" y="794" width="5" height="5.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_chkstk @ 0x0061ff50
 47 bytes — Identified (purpose known)</title></rect>
 <rect x="1432.6" y="794" width="4.9" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622af6 @ 0x00622af6
 46 bytes — Classified (class/role known)</title></rect>
 <rect x="1437.5" y="794" width="4.9" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_625744 @ 0x00625744
 46 bytes — Classified (class/role known)</title></rect>
-<rect x="1442.5" y="794" width="4.9" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cabe @ 0x0061cabe
-46 bytes — Classified (class/role known)</title></rect>
-<rect x="1447.4" y="794" width="4.9" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cd8c @ 0x0061cd8c
-46 bytes — Classified (class/role known)</title></rect>
-<rect x="1452.3" y="794" width="4.9" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d571 @ 0x0062d571
-46 bytes — Classified (class/role known)</title></rect>
+<rect x="1442.5" y="794" width="4.9" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cabe @ 0x0061cabe
+46 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1447.4" y="794" width="4.9" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cd8c @ 0x0061cd8c
+46 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1452.3" y="794" width="4.9" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d571 @ 0x0062d571
+46 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1407.4" y="799.3" width="5.1" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f2d0 @ 0x0061f2d0
 46 bytes — Classified (class/role known)</title></rect>
 <rect x="1407.4" y="804.4" width="5.1" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6212f7 @ 0x006212f7
 45 bytes — Classified (class/role known)</title></rect>
-<rect x="1407.4" y="809.5" width="5.1" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b5d9 @ 0x0062b5d9
-45 bytes — Classified (class/role known)</title></rect>
-<rect x="1407.4" y="814.5" width="5.1" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b606 @ 0x0062b606
-45 bytes — Classified (class/role known)</title></rect>
-<rect x="1407.4" y="819.5" width="5.1" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d59f @ 0x0062d59f
-45 bytes — Classified (class/role known)</title></rect>
-<rect x="1407.4" y="824.5" width="5.1" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f06a @ 0x0061f06a
-45 bytes — Classified (class/role known)</title></rect>
+<rect x="1407.4" y="809.5" width="5.1" height="5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b5d9 @ 0x0062b5d9
+45 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1407.4" y="814.5" width="5.1" height="5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b606 @ 0x0062b606
+45 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1407.4" y="819.5" width="5.1" height="5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d59f @ 0x0062d59f
+45 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1407.4" y="824.5" width="5.1" height="5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f06a @ 0x0061f06a
+45 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1407.4" y="829.5" width="5.1" height="4.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621556 @ 0x00621556
 44 bytes — Classified (class/role known)</title></rect>
-<rect x="1407.4" y="834.5" width="5.1" height="4.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__nh_malloc @ 0x00621796
-44 bytes — Identified (purpose known)</title></rect>
+<rect x="1407.4" y="834.5" width="5.1" height="4.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__nh_malloc @ 0x00621796
+44 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1407.4" y="839.4" width="5.1" height="4.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621993 @ 0x00621993
 44 bytes — Classified (class/role known)</title></rect>
 <rect x="1412.5" y="799.3" width="5.1" height="4.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621f95 @ 0x00621f95
 43 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.6" y="799.3" width="5.1" height="4.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__freebuf @ 0x00628085
-43 bytes — Identified (purpose known)</title></rect>
-<rect x="1422.6" y="799.3" width="5.1" height="4.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628510 @ 0x00628510
-43 bytes — Classified (class/role known)</title></rect>
-<rect x="1427.7" y="799.3" width="5.1" height="4.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ec4b @ 0x0062ec4b
-43 bytes — Classified (class/role known)</title></rect>
+<rect x="1417.6" y="799.3" width="5.1" height="4.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__freebuf @ 0x00628085
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1422.6" y="799.3" width="5.1" height="4.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_628510 @ 0x00628510
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1427.7" y="799.3" width="5.1" height="4.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62ec4b @ 0x0062ec4b
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1432.8" y="799.3" width="5" height="4.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_itoa @ 0x00621380
 42 bytes — Identified (purpose known)</title></rect>
-<rect x="1437.7" y="799.3" width="5" height="4.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627ca6 @ 0x00627ca6
-42 bytes — Classified (class/role known)</title></rect>
+<rect x="1437.7" y="799.3" width="5" height="4.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627ca6 @ 0x00627ca6
+42 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1442.7" y="799.3" width="5" height="4.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62813d @ 0x0062813d
 42 bytes — Classified (class/role known)</title></rect>
-<rect x="1447.6" y="799.3" width="4.8" height="4.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6245b3 @ 0x006245b3
-41 bytes — Classified (class/role known)</title></rect>
-<rect x="1452.5" y="799.3" width="4.8" height="4.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624a02 @ 0x00624a02
-41 bytes — Classified (class/role known)</title></rect>
-<rect x="1412.5" y="804.1" width="4.6" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6260fc @ 0x006260fc
-41 bytes — Classified (class/role known)</title></rect>
+<rect x="1447.6" y="799.3" width="4.8" height="4.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6245b3 @ 0x006245b3
+41 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1452.5" y="799.3" width="4.8" height="4.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624a02 @ 0x00624a02
+41 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1412.5" y="804.1" width="4.6" height="5.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6260fc @ 0x006260fc
+41 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1412.5" y="809.2" width="4.6" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b809 @ 0x0062b809
 41 bytes — Classified (class/role known)</title></rect>
 <rect x="1412.5" y="814.3" width="4.6" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c6b2 @ 0x0061c6b2
 41 bytes — Classified (class/role known)</title></rect>
-<rect x="1412.5" y="819.4" width="4.6" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d14b @ 0x0062d14b
-41 bytes — Classified (class/role known)</title></rect>
-<rect x="1412.5" y="824.5" width="4.6" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e674 @ 0x0062e674
-40 bytes — Classified (class/role known)</title></rect>
+<rect x="1412.5" y="819.4" width="4.6" height="5.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d14b @ 0x0062d14b
+41 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1412.5" y="824.5" width="4.6" height="5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e674 @ 0x0062e674
+40 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1412.5" y="829.4" width="4.6" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f51f @ 0x0061f51f
 40 bytes — Classified (class/role known)</title></rect>
 <rect x="1412.5" y="834.4" width="4.6" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f824 @ 0x0061f824
 40 bytes — Classified (class/role known)</title></rect>
 <rect x="1412.5" y="839.3" width="4.6" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f84c @ 0x0061f84c
 40 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.1" y="804.1" width="4.8" height="4.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620d30 @ 0x00620d30
-39 bytes — Classified (class/role known)</title></rect>
+<rect x="1417.1" y="804.1" width="4.8" height="4.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620d30 @ 0x00620d30
+39 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1417.1" y="808.7" width="4.8" height="4.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_strrchr @ 0x00622aa0
 39 bytes — Identified (purpose known)</title></rect>
 <rect x="1417.1" y="813.4" width="4.8" height="4.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__ftol @ 0x0061fe98
 39 bytes — Identified (purpose known)</title></rect>
 <rect x="1417.1" y="818" width="4.8" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6213aa @ 0x006213aa
 38 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.1" y="822.4" width="4.8" height="4.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620533 @ 0x00620533
-37 bytes — Classified (class/role known)</title></rect>
+<rect x="1417.1" y="822.4" width="4.8" height="4.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620533 @ 0x00620533
+37 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1417.1" y="826.8" width="4.8" height="4.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621582 @ 0x00621582
 37 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.1" y="831.2" width="4.8" height="4.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__amsg_exit @ 0x00621cce
-37 bytes — Identified (purpose known)</title></rect>
-<rect x="1417.1" y="835.5" width="4.8" height="4.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621cf3 @ 0x00621cf3
-37 bytes — Classified (class/role known)</title></rect>
-<rect x="1417.1" y="839.9" width="4.8" height="4.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6249dd @ 0x006249dd
-37 bytes — Classified (class/role known)</title></rect>
-<rect x="1421.9" y="804.1" width="4.5" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e162 @ 0x0061e162
-37 bytes — Classified (class/role known)</title></rect>
-<rect x="1426.5" y="804.1" width="4.5" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e2c0 @ 0x0061e2c0
-37 bytes — Classified (class/role known)</title></rect>
-<rect x="1431" y="804.1" width="4.5" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ecb0 @ 0x0061ecb0
-37 bytes — Classified (class/role known)</title></rect>
-<rect x="1435.6" y="804.1" width="4.4" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624a8c @ 0x00624a8c
-36 bytes — Classified (class/role known)</title></rect>
+<rect x="1417.1" y="831.2" width="4.8" height="4.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__amsg_exit @ 0x00621cce
+37 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1417.1" y="835.5" width="4.8" height="4.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621cf3 @ 0x00621cf3
+37 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1417.1" y="839.9" width="4.8" height="4.4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6249dd @ 0x006249dd
+37 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1421.9" y="804.1" width="4.5" height="4.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e162 @ 0x0061e162
+37 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1426.5" y="804.1" width="4.5" height="4.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e2c0 @ 0x0061e2c0
+37 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1431" y="804.1" width="4.5" height="4.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ecb0 @ 0x0061ecb0
+37 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1435.6" y="804.1" width="4.4" height="4.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624a8c @ 0x00624a8c
+36 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1440" y="804.1" width="4.4" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629a9e @ 0x00629a9e
 36 bytes — Classified (class/role known)</title></rect>
-<rect x="1444.4" y="804.1" width="4.3" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622124 @ 0x00622124
-35 bytes — Classified (class/role known)</title></rect>
-<rect x="1448.7" y="804.1" width="4.3" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622176 @ 0x00622176
-35 bytes — Classified (class/role known)</title></rect>
+<rect x="1444.4" y="804.1" width="4.3" height="4.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622124 @ 0x00622124
+35 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1448.7" y="804.1" width="4.3" height="4.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622176 @ 0x00622176
+35 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1453" y="804.1" width="4.3" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61ca85 @ 0x0061ca85
 35 bytes — Classified (class/role known)</title></rect>
 <rect x="1421.9" y="808.8" width="4.5" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d697 @ 0x0061d697
 35 bytes — Classified (class/role known)</title></rect>
-<rect x="1426.4" y="808.8" width="4.5" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e6b9 @ 0x0062e6b9
-35 bytes — Classified (class/role known)</title></rect>
-<rect x="1430.9" y="808.8" width="4.5" height="4.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__abnormal_termination @ 0x0061ef26
-35 bytes — Identified (purpose known)</title></rect>
+<rect x="1426.4" y="808.8" width="4.5" height="4.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e6b9 @ 0x0062e6b9
+35 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1430.9" y="808.8" width="4.5" height="4.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__abnormal_termination @ 0x0061ef26
+35 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1435.4" y="808.8" width="4.5" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fdf8 @ 0x0061fdf8
 35 bytes — Classified (class/role known)</title></rect>
 <rect x="1439.9" y="808.8" width="4.4" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621810 @ 0x00621810
 34 bytes — Classified (class/role known)</title></rect>
 <rect x="1444.2" y="808.8" width="4.4" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621da0 @ 0x00621da0
 34 bytes — Classified (class/role known)</title></rect>
-<rect x="1448.6" y="808.8" width="4.4" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62adf9 @ 0x0062adf9
-34 bytes — Classified (class/role known)</title></rect>
-<rect x="1452.9" y="808.8" width="4.4" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c56c @ 0x0061c56c
-34 bytes — Classified (class/role known)</title></rect>
+<rect x="1448.6" y="808.8" width="4.4" height="4.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62adf9 @ 0x0062adf9
+34 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1452.9" y="808.8" width="4.4" height="4.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c56c @ 0x0061c56c
+34 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1421.9" y="813.3" width="4.2" height="4.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>rand @ 0x0061f802
 34 bytes — Identified (purpose known)</title></rect>
 <rect x="1421.9" y="817.9" width="4.2" height="4.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f8ba @ 0x0061f8ba
 34 bytes — Classified (class/role known)</title></rect>
 <rect x="1421.9" y="822.5" width="4.2" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6259f9 @ 0x006259f9
 33 bytes — Classified (class/role known)</title></rect>
-<rect x="1421.9" y="826.9" width="4.2" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d4f2 @ 0x0062d4f2
-33 bytes — Classified (class/role known)</title></rect>
+<rect x="1421.9" y="826.9" width="4.2" height="4.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62d4f2 @ 0x0062d4f2
+33 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1421.9" y="831.4" width="4.2" height="4.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621273 @ 0x00621273
 32 bytes — Classified (class/role known)</title></rect>
 <rect x="1421.9" y="835.7" width="4.2" height="4.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>__EH_prolog @ 0x00622c30
 32 bytes — Classified (class/role known)</title></rect>
-<rect x="1421.9" y="840.1" width="4.2" height="4.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627ad0 @ 0x00627ad0
-31 bytes — Classified (class/role known)</title></rect>
+<rect x="1421.9" y="840.1" width="4.2" height="4.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627ad0 @ 0x00627ad0
+31 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1426.1" y="813.3" width="4.3" height="4.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__allshl @ 0x0062c190
 31 bytes — Identified (purpose known)</title></rect>
-<rect x="1426.1" y="817.4" width="4.3" height="4.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61ce32 @ 0x0061ce32
-31 bytes — Classified (class/role known)</title></rect>
-<rect x="1426.1" y="821.5" width="4.3" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e073 @ 0x0061e073
-30 bytes — Classified (class/role known)</title></rect>
+<rect x="1426.1" y="817.4" width="4.3" height="4.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61ce32 @ 0x0061ce32
+31 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1426.1" y="821.5" width="4.3" height="4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e073 @ 0x0061e073
+30 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1426.1" y="825.5" width="4.3" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fe1b @ 0x0061fe1b
 29 bytes — Classified (class/role known)</title></rect>
-<rect x="1426.1" y="829.4" width="4.3" height="3.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6262aa @ 0x006262aa
-28 bytes — Classified (class/role known)</title></rect>
-<rect x="1426.1" y="833.1" width="4.3" height="3.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62af40 @ 0x0062af40
-28 bytes — Classified (class/role known)</title></rect>
-<rect x="1426.1" y="836.8" width="4.3" height="3.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62af5c @ 0x0062af5c
-28 bytes — Classified (class/role known)</title></rect>
-<rect x="1426.1" y="840.6" width="4.3" height="3.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fb1f @ 0x0061fb1f
-28 bytes — Classified (class/role known)</title></rect>
+<rect x="1426.1" y="829.4" width="4.3" height="3.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6262aa @ 0x006262aa
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1426.1" y="833.1" width="4.3" height="3.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62af40 @ 0x0062af40
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1426.1" y="836.8" width="4.3" height="3.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62af5c @ 0x0062af5c
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1426.1" y="840.6" width="4.3" height="3.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fb1f @ 0x0061fb1f
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1430.4" y="813.3" width="3.9" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62082c @ 0x0062082c
 27 bytes — Classified (class/role known)</title></rect>
-<rect x="1434.3" y="813.3" width="3.9" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6222ed @ 0x006222ed
-27 bytes — Classified (class/role known)</title></rect>
-<rect x="1438.2" y="813.3" width="3.9" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62847b @ 0x0062847b
-27 bytes — Classified (class/role known)</title></rect>
-<rect x="1442" y="813.3" width="3.9" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b372 @ 0x0062b372
-27 bytes — Classified (class/role known)</title></rect>
-<rect x="1445.9" y="813.3" width="3.9" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b399 @ 0x0062b399
-27 bytes — Classified (class/role known)</title></rect>
+<rect x="1434.3" y="813.3" width="3.9" height="4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6222ed @ 0x006222ed
+27 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1438.2" y="813.3" width="3.9" height="4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62847b @ 0x0062847b
+27 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1442" y="813.3" width="3.9" height="4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b372 @ 0x0062b372
+27 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1445.9" y="813.3" width="3.9" height="4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b399 @ 0x0062b399
+27 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1449.7" y="813.3" width="3.9" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f00c @ 0x0061f00c
 27 bytes — Classified (class/role known)</title></rect>
-<rect x="1453.6" y="813.3" width="3.7" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627a50 @ 0x00627a50
-26 bytes — Classified (class/role known)</title></rect>
+<rect x="1453.6" y="813.3" width="3.7" height="4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627a50 @ 0x00627a50
+26 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1430.4" y="817.3" width="3.9" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629a6d @ 0x00629a6d
 26 bytes — Classified (class/role known)</title></rect>
-<rect x="1434.4" y="817.3" width="3.9" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cdfc @ 0x0061cdfc
-26 bytes — Classified (class/role known)</title></rect>
-<rect x="1438.3" y="817.3" width="3.9" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f170 @ 0x0061f170
-26 bytes — Classified (class/role known)</title></rect>
+<rect x="1434.4" y="817.3" width="3.9" height="3.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cdfc @ 0x0061cdfc
+26 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1438.3" y="817.3" width="3.9" height="3.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f170 @ 0x0061f170
+26 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1442.2" y="817.3" width="3.9" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fb53 @ 0x0061fb53
 26 bytes — Classified (class/role known)</title></rect>
 <rect x="1446.1" y="817.3" width="3.8" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622a47 @ 0x00622a47
 25 bytes — Classified (class/role known)</title></rect>
-<rect x="1449.9" y="817.3" width="3.8" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f9d7 @ 0x0061f9d7
-25 bytes — Classified (class/role known)</title></rect>
+<rect x="1449.9" y="817.3" width="3.8" height="3.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f9d7 @ 0x0061f9d7
+25 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1453.7" y="817.3" width="3.6" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_620814 @ 0x00620814
 24 bytes — Classified (class/role known)</title></rect>
-<rect x="1430.4" y="821" width="3.5" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62af78 @ 0x0062af78
-24 bytes — Classified (class/role known)</title></rect>
+<rect x="1430.4" y="821" width="3.5" height="3.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62af78 @ 0x0062af78
+24 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1430.4" y="824.9" width="3.5" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61e62e @ 0x0061e62e
 24 bytes — Classified (class/role known)</title></rect>
-<rect x="1430.4" y="828.8" width="3.5" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ef52 @ 0x0061ef52
-24 bytes — Classified (class/role known)</title></rect>
+<rect x="1430.4" y="828.8" width="3.5" height="3.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ef52 @ 0x0061ef52
+24 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1430.4" y="832.7" width="3.5" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f1f2 @ 0x0061f1f2
 24 bytes — Classified (class/role known)</title></rect>
-<rect x="1430.4" y="836.5" width="3.5" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f8dc @ 0x0061f8dc
-24 bytes — Classified (class/role known)</title></rect>
-<rect x="1430.4" y="840.4" width="3.5" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f8f4 @ 0x0061f8f4
-24 bytes — Classified (class/role known)</title></rect>
+<rect x="1430.4" y="836.5" width="3.5" height="3.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f8dc @ 0x0061f8dc
+24 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1430.4" y="840.4" width="3.5" height="3.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f8f4 @ 0x0061f8f4
+24 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1434" y="821" width="3.5" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fb07 @ 0x0061fb07
 24 bytes — Classified (class/role known)</title></rect>
-<rect x="1434" y="825" width="3.5" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fb3b @ 0x0061fb3b
-24 bytes — Classified (class/role known)</title></rect>
+<rect x="1434" y="825" width="3.5" height="4" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fb3b @ 0x0061fb3b
+24 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1434" y="829" width="3.5" height="4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ffe9 @ 0x0061ffe9
 24 bytes — Classified (class/role known)</title></rect>
 <rect x="1434" y="832.9" width="3.5" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_629a87 @ 0x00629a87
@@ -33709,14 +33721,14 @@
 23 bytes — Classified (class/role known)</title></rect>
 <rect x="1434" y="840.5" width="3.5" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62af90 @ 0x0062af90
 23 bytes — Classified (class/role known)</title></rect>
-<rect x="1437.4" y="821" width="3.5" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ef6a @ 0x0061ef6a
-23 bytes — Classified (class/role known)</title></rect>
-<rect x="1440.9" y="821" width="3.3" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62afdc @ 0x0062afdc
-22 bytes — Classified (class/role known)</title></rect>
-<rect x="1444.3" y="821" width="3.3" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b5ad @ 0x0062b5ad
-22 bytes — Classified (class/role known)</title></rect>
-<rect x="1447.6" y="821" width="3.3" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b5c3 @ 0x0062b5c3
-22 bytes — Classified (class/role known)</title></rect>
+<rect x="1437.4" y="821" width="3.5" height="3.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61ef6a @ 0x0061ef6a
+23 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1440.9" y="821" width="3.3" height="3.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62afdc @ 0x0062afdc
+22 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1444.3" y="821" width="3.3" height="3.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b5ad @ 0x0062b5ad
+22 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1447.6" y="821" width="3.3" height="3.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b5c3 @ 0x0062b5c3
+22 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1450.9" y="821" width="3.2" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62a6a0 @ 0x0062a6a0
 21 bytes — Classified (class/role known)</title></rect>
 <rect x="1454.1" y="821" width="3.2" height="3.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61e77f @ 0x0061e77f
@@ -33725,8 +33737,8 @@
 20 bytes — Classified (class/role known)</title></rect>
 <rect x="1437.4" y="828.2" width="3.4" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_621543 @ 0x00621543
 19 bytes — Classified (class/role known)</title></rect>
-<rect x="1437.4" y="831.4" width="3.4" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622927 @ 0x00622927
-19 bytes — Classified (class/role known)</title></rect>
+<rect x="1437.4" y="831.4" width="3.4" height="3.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_622927 @ 0x00622927
+19 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1437.4" y="834.6" width="3.4" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c88b @ 0x0061c88b
 19 bytes — Classified (class/role known)</title></rect>
 <rect x="1437.4" y="837.9" width="3.4" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61cd79 @ 0x0061cd79
@@ -33739,32 +33751,32 @@
 19 bytes — Classified (class/role known)</title></rect>
 <rect x="1447.6" y="824.8" width="3.2" height="3.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>_malloc @ 0x00621784
 18 bytes — Identified (purpose known)</title></rect>
-<rect x="1450.8" y="824.8" width="3.2" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624563 @ 0x00624563
-18 bytes — Classified (class/role known)</title></rect>
+<rect x="1450.8" y="824.8" width="3.2" height="3.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_624563 @ 0x00624563
+18 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1454.1" y="824.8" width="3.2" height="3.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__frnd @ 0x0062d28f
 18 bytes — Identified (purpose known)</title></rect>
-<rect x="1440.8" y="828" width="2.9" height="3.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c21d @ 0x0062c21d
-17 bytes — Classified (class/role known)</title></rect>
+<rect x="1440.8" y="828" width="2.9" height="3.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62c21d @ 0x0062c21d
+17 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1440.8" y="831.3" width="2.9" height="3.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f097 @ 0x0061f097
 17 bytes — Classified (class/role known)</title></rect>
-<rect x="1440.8" y="834.7" width="2.9" height="3.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>__exit @ 0x0061f0a8
-17 bytes — Identified (purpose known)</title></rect>
+<rect x="1440.8" y="834.7" width="2.9" height="3.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>__exit @ 0x0061f0a8
+17 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1440.8" y="838" width="2.9" height="3.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62549c @ 0x0062549c
 16 bytes — Classified (class/role known)</title></rect>
 <rect x="1440.8" y="841.1" width="2.9" height="3.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_627330 @ 0x00627330
 16 bytes — Classified (class/role known)</title></rect>
-<rect x="1443.7" y="828" width="2.9" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d00c @ 0x0061d00c
-16 bytes — Classified (class/role known)</title></rect>
-<rect x="1446.6" y="828" width="2.7" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c7f3 @ 0x0061c7f3
-15 bytes — Classified (class/role known)</title></rect>
-<rect x="1449.3" y="828" width="2.7" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e386 @ 0x0061e386
-15 bytes — Classified (class/role known)</title></rect>
-<rect x="1452" y="828" width="2.7" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e6aa @ 0x0062e6aa
-15 bytes — Classified (class/role known)</title></rect>
+<rect x="1443.7" y="828" width="2.9" height="3.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d00c @ 0x0061d00c
+16 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1446.6" y="828" width="2.7" height="3.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61c7f3 @ 0x0061c7f3
+15 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1449.3" y="828" width="2.7" height="3.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61e386 @ 0x0061e386
+15 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1452" y="828" width="2.7" height="3.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e6aa @ 0x0062e6aa
+15 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1454.8" y="828" width="2.5" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_6254ac @ 0x006254ac
 14 bytes — Classified (class/role known)</title></rect>
-<rect x="1443.7" y="831.2" width="2.9" height="2.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e69c @ 0x0062e69c
-14 bytes — Classified (class/role known)</title></rect>
+<rect x="1443.7" y="831.2" width="2.9" height="2.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62e69c @ 0x0062e69c
+14 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1443.7" y="833.9" width="2.9" height="2.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>operator_new @ 0x0061efb9
 14 bytes — Identified (purpose known)</title></rect>
 <rect x="1443.7" y="836.7" width="2.9" height="2.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62548f @ 0x0062548f
@@ -33773,8 +33785,8 @@
 13 bytes — Identified (purpose known)</title></rect>
 <rect x="1443.7" y="841.7" width="2.9" height="2.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61f7f5 @ 0x0061f7f5
 13 bytes — Classified (class/role known)</title></rect>
-<rect x="1446.7" y="831.2" width="2.7" height="2.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b38d @ 0x0062b38d
-12 bytes — Classified (class/role known)</title></rect>
+<rect x="1446.7" y="831.2" width="2.7" height="2.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_62b38d @ 0x0062b38d
+12 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1449.3" y="831.2" width="2.7" height="2.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AtexitReg_61ca59 @ 0x0061ca59
 12 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1452" y="831.2" width="2.7" height="2.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>StaticDtorReg_7e9228 @ 0x0061caa8
@@ -33787,10 +33799,10 @@
 12 bytes — Identified (purpose known)</title></rect>
 <rect x="1446.7" y="839.1" width="2.5" height="2.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRT_sub_61fe38 @ 0x0061fe38
 12 bytes — Classified (class/role known)</title></rect>
-<rect x="1446.7" y="841.8" width="2.5" height="2.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d19f @ 0x0061d19f
-11 bytes — Classified (class/role known)</title></rect>
-<rect x="1449.2" y="833.8" width="2.7" height="2.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d1aa @ 0x0061d1aa
-11 bytes — Classified (class/role known)</title></rect>
+<rect x="1446.7" y="841.8" width="2.5" height="2.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d19f @ 0x0061d19f
+11 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1449.2" y="833.8" width="2.7" height="2.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d1aa @ 0x0061d1aa
+11 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1451.9" y="833.8" width="2.7" height="2.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d1b5 @ 0x0061d1b5
 11 bytes — Classified (class/role known)</title></rect>
 <rect x="1454.6" y="833.8" width="2.7" height="2.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d1c0 @ 0x0061d1c0
@@ -33801,134 +33813,134 @@
 9 bytes — Classified (class/role known)</title></rect>
 <rect x="1453.5" y="836.1" width="1.9" height="2.7" fill="#e8a39b"><title>CRT_sub_625536 @ 0x00625536
 9 bytes — Classified (class/role known)</title></rect>
-<rect x="1455.4" y="836.1" width="1.9" height="2.7" fill="#e8a39b"><title>CRT_sub_62b7bc @ 0x0062b7bc
-9 bytes — Classified (class/role known)</title></rect>
-<rect x="1449.2" y="838.8" width="1.9" height="2.8" fill="#f2c86b"><title>__NLG_Notify1 @ 0x0061ef49
-9 bytes — Identified (purpose known)</title></rect>
-<rect x="1449.2" y="841.5" width="1.9" height="2.8" fill="#e8a39b"><title>_purecall @ 0x0061f061
-9 bytes — Classified (class/role known)</title></rect>
-<rect x="1451.1" y="838.8" width="1.9" height="2.8" fill="#e8a39b"><title>CRT_sub_61f15e @ 0x0061f15e
-9 bytes — Classified (class/role known)</title></rect>
-<rect x="1451.1" y="841.5" width="1.9" height="2.8" fill="#e8a39b"><title>CRT_sub_61f167 @ 0x0061f167
-9 bytes — Classified (class/role known)</title></rect>
+<rect x="1455.4" y="836.1" width="1.9" height="2.7" fill="#7d8590"><title>CRT_sub_62b7bc @ 0x0062b7bc
+9 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1449.2" y="838.8" width="1.9" height="2.8" fill="#7d8590"><title>__NLG_Notify1 @ 0x0061ef49
+9 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1449.2" y="841.5" width="1.9" height="2.8" fill="#7d8590"><title>_purecall @ 0x0061f061
+9 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1451.1" y="838.8" width="1.9" height="2.8" fill="#7d8590"><title>CRT_sub_61f15e @ 0x0061f15e
+9 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1451.1" y="841.5" width="1.9" height="2.8" fill="#7d8590"><title>CRT_sub_61f167 @ 0x0061f167
+9 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1452.9" y="838.8" width="2.2" height="2.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>IOS_sub_61d7dd @ 0x0061d7dd
 8 bytes — Classified (class/role known)</title></rect>
-<rect x="1455.1" y="838.8" width="2.2" height="2.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>ImportThunk_RtlUnwind @ 0x0062ef78
-8 bytes — Identified (purpose known)</title></rect>
-<rect x="1452.9" y="840.9" width="2.3" height="1.7" fill="#e8a39b"><title>CRT_sub_61ebc9 @ 0x0061ebc9
-7 bytes — Classified (class/role known)</title></rect>
-<rect x="1452.9" y="842.6" width="2.3" height="1.7" fill="#e8a39b"><title>CRT_sub_61ebd0 @ 0x0061ebd0
-7 bytes — Classified (class/role known)</title></rect>
+<rect x="1455.1" y="838.8" width="2.2" height="2.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>ImportThunk_RtlUnwind @ 0x0062ef78
+8 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1452.9" y="840.9" width="2.3" height="1.7" fill="#7d8590"><title>CRT_sub_61ebc9 @ 0x0061ebc9
+7 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1452.9" y="842.6" width="2.3" height="1.7" fill="#7d8590"><title>CRT_sub_61ebd0 @ 0x0061ebd0
+7 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1455.3" y="840.9" width="2" height="1.7" fill="#f2c86b"><title>ImportThunk_622a41 @ 0x00622a41
 6 bytes — Identified (purpose known)</title></rect>
-<rect x="1455.3" y="842.6" width="1.7" height="1.7" fill="#e8a39b"><title>JmpThunk_61f90c @ 0x0061f90c
-5 bytes — Classified (class/role known)</title></rect>
+<rect x="1455.3" y="842.6" width="1.7" height="1.7" fill="#7d8590"><title>JmpThunk_61f90c @ 0x0061f90c
+5 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1457" y="842.6" width="0.3" height="1.7" fill="#f2c86b"><title>IOS_sub_61cb23 @ 0x0061cb23
 1 bytes — Identified (purpose known)</title></rect>
 </g>
 <g><title>strstreambuf: 8 functions</title><rect x="1457.8" y="681.9" width="10" height="48.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1458.3" y="682.4" width="9" height="16.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf10 @ 0x0061d7e5
-265 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="698.5" width="9" height="12.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf03 @ 0x0061d9b5
-206 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="711" width="9" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf07 @ 0x0061d8fe
-119 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="718.3" width="9" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::~strstreambuf @ 0x0061d78b
-82 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="723.3" width="5.1" height="6.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf08 @ 0x0061d975
-61 bytes — Classified (class/role known)</title></rect>
-<rect x="1463.4" y="723.3" width="3.9" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::scalar_deleting_destructor @ 0x0061d6d0
-28 bytes — Classified (class/role known)</title></rect>
-<rect x="1463.4" y="727.2" width="3.3" height="2.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf02 @ 0x0061d8ee
-16 bytes — Classified (class/role known)</title></rect>
+<rect x="1458.3" y="682.4" width="9" height="16.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf10 @ 0x0061d7e5
+265 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="698.5" width="9" height="12.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf03 @ 0x0061d9b5
+206 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="711" width="9" height="7.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf07 @ 0x0061d8fe
+119 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="718.3" width="9" height="5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::~strstreambuf @ 0x0061d78b
+82 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="723.3" width="5.1" height="6.6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf08 @ 0x0061d975
+61 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1463.4" y="723.3" width="3.9" height="3.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::scalar_deleting_destructor @ 0x0061d6d0
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1463.4" y="727.2" width="3.3" height="2.7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>strstreambuf::vf02 @ 0x0061d8ee
+16 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1466.6" y="727.2" width="0.6" height="2.7" fill="#f2c86b"><title>strstreambuf::vf01 @ 0x0061d9b2
 3 bytes — Identified (purpose known)</title></rect>
 </g>
 <g><title>filebuf: 7 functions</title><rect x="1457.8" y="730.3" width="10" height="47.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1458.3" y="730.8" width="9" height="13.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf01 @ 0x0061d060
-219 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="744.1" width="9" height="8.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf08 @ 0x0061cf7c
-144 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="752.9" width="9" height="6.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf07 @ 0x0061cf0b
-113 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="759.8" width="9" height="6.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf02 @ 0x0061d13b
-100 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="765.8" width="9" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>filebuf::~filebuf @ 0x0061ce51
-87 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="771.1" width="6.4" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf03 @ 0x0061d01c
-68 bytes — Classified (class/role known)</title></rect>
-<rect x="1464.6" y="771.1" width="2.6" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>filebuf::scalar_deleting_destructor @ 0x0061ce16
-28 bytes — Classified (class/role known)</title></rect>
+<rect x="1458.3" y="730.8" width="9" height="13.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf01 @ 0x0061d060
+219 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="744.1" width="9" height="8.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf08 @ 0x0061cf7c
+144 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="752.9" width="9" height="6.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf07 @ 0x0061cf0b
+113 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="759.8" width="9" height="6.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf02 @ 0x0061d13b
+100 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="765.8" width="9" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>filebuf::~filebuf @ 0x0061ce51
+87 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="771.1" width="6.4" height="5.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>filebuf::vf03 @ 0x0061d01c
+68 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1464.6" y="771.1" width="2.6" height="5.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>filebuf::scalar_deleting_destructor @ 0x0061ce16
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>streambuf: 10 functions</title><rect x="1457.8" y="777.5" width="10" height="34.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1458.3" y="778" width="9" height="9.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf06 @ 0x0061dfc5
-151 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="787.1" width="9" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf09 @ 0x0061e106
-92 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="792.6" width="9" height="5.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf05 @ 0x0061df6f
-86 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="797.8" width="4.7" height="6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf02 @ 0x0061df3b
-52 bytes — Classified (class/role known)</title></rect>
-<rect x="1463" y="797.8" width="4.3" height="6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::~streambuf @ 0x0061df0b
-48 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="803.8" width="5.5" height="4.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf10 @ 0x0061e091
-45 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="808.3" width="5.5" height="2.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::scalar_deleting_destructor @ 0x0061deef
-28 bytes — Classified (class/role known)</title></rect>
-<rect x="1463.7" y="803.8" width="3.5" height="3.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf01 @ 0x0061e05c
-23 bytes — Classified (class/role known)</title></rect>
-<rect x="1463.7" y="807.4" width="3.5" height="2.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf04 @ 0x0061e0f4
-18 bytes — Classified (class/role known)</title></rect>
+<rect x="1458.3" y="778" width="9" height="9.1" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf06 @ 0x0061dfc5
+151 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="787.1" width="9" height="5.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf09 @ 0x0061e106
+92 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="792.6" width="9" height="5.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf05 @ 0x0061df6f
+86 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="797.8" width="4.7" height="6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf02 @ 0x0061df3b
+52 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1463" y="797.8" width="4.3" height="6" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::~streambuf @ 0x0061df0b
+48 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="803.8" width="5.5" height="4.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf10 @ 0x0061e091
+45 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="808.3" width="5.5" height="2.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::scalar_deleting_destructor @ 0x0061deef
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1463.7" y="803.8" width="3.5" height="3.5" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf01 @ 0x0061e05c
+23 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1463.7" y="807.4" width="3.5" height="2.8" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>streambuf::vf04 @ 0x0061e0f4
+18 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1463.7" y="810.1" width="3.5" height="0.9" fill="#f2c86b"><title>streambuf::vf03 @ 0x0061e0ee
 6 bytes — Identified (purpose known)</title></rect>
 </g>
 <g><title>ios: 2 functions</title><rect x="1457.8" y="811.6" width="10" height="6.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1458.3" y="812.1" width="6.5" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>ios::~ios @ 0x0061cb9e
 74 bytes — Classified (class/role known)</title></rect>
-<rect x="1464.8" y="812.1" width="2.5" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>ios::scalar_deleting_destructor @ 0x0061cb82
-28 bytes — Classified (class/role known)</title></rect>
+<rect x="1464.8" y="812.1" width="2.5" height="5.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>ios::scalar_deleting_destructor @ 0x0061cb82
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>type_info: 2 functions</title><rect x="1457.8" y="817.9" width="5.2" height="8.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1458.3" y="818.4" width="4.2" height="4.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>type_info::~type_info @ 0x0061efc7
-41 bytes — Classified (class/role known)</title></rect>
-<rect x="1458.3" y="822.7" width="4.2" height="2.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>type_info::scalar_deleting_destructor @ 0x0061eff0
-28 bytes — Classified (class/role known)</title></rect>
+<rect x="1458.3" y="818.4" width="4.2" height="4.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>type_info::~type_info @ 0x0061efc7
+41 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
+<rect x="1458.3" y="822.7" width="4.2" height="2.9" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>type_info::scalar_deleting_destructor @ 0x0061eff0
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>exception: 3 functions</title><rect x="1463" y="817.9" width="4.8" height="8.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1463.5" y="818.4" width="3.8" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>exception::scalar_deleting_destructor @ 0x006215a7
-28 bytes — Classified (class/role known)</title></rect>
+<rect x="1463.5" y="818.4" width="3.8" height="3.2" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>exception::scalar_deleting_destructor @ 0x006215a7
+28 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 <rect x="1463.5" y="821.6" width="3.8" height="2.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>exception::~exception @ 0x0062164a
 22 bytes — Classified (class/role known)</title></rect>
-<rect x="1463.5" y="824.1" width="3.8" height="1.5" fill="#e8a39b"><title>exception::vf01 @ 0x00621660
-13 bytes — Classified (class/role known)</title></rect>
+<rect x="1463.5" y="824.1" width="3.8" height="1.5" fill="#7d8590"><title>exception::vf01 @ 0x00621660
+13 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>ostream: 1 functions</title><rect x="1457.8" y="826.1" width="5" height="5.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1458.3" y="826.6" width="4" height="4.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>ostream::vf00_sub8 @ 0x0061c763
-43 bytes — Classified (class/role known)</title></rect>
+<rect x="1458.3" y="826.6" width="4" height="4.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>ostream::vf00_sub8 @ 0x0061c763
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>ostream_withassign: 1 functions</title><rect x="1462.8" y="826.1" width="5" height="5.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1463.3" y="826.6" width="4" height="4.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>ostream_withassign::vf00_sub8 @ 0x0061c802
-43 bytes — Classified (class/role known)</title></rect>
+<rect x="1463.3" y="826.6" width="4" height="4.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>ostream_withassign::vf00_sub8 @ 0x0061c802
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>ofstream: 1 functions</title><rect x="1457.8" y="831.4" width="5" height="5.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1458.3" y="831.9" width="4" height="4.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>ofstream::vf00_sub8 @ 0x0061cd4e
-43 bytes — Classified (class/role known)</title></rect>
+<rect x="1458.3" y="831.9" width="4" height="4.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>ofstream::vf00_sub8 @ 0x0061cd4e
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>fstream: 1 functions</title><rect x="1462.8" y="831.4" width="5" height="5.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1463.3" y="831.9" width="4" height="4.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>fstream::vf00_sub14 @ 0x0061d261
-43 bytes — Classified (class/role known)</title></rect>
+<rect x="1463.3" y="831.9" width="4" height="4.3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>fstream::vf00_sub14 @ 0x0061d261
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>ostrstream: 1 functions</title><rect x="1457.8" y="836.8" width="6.6" height="4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1458.3" y="837.3" width="5.6" height="3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>ostrstream::vf00_sub8 @ 0x0061da83
-43 bytes — Classified (class/role known)</title></rect>
+<rect x="1458.3" y="837.3" width="5.6" height="3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>ostrstream::vf00_sub8 @ 0x0061da83
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>iostream: 1 functions</title><rect x="1457.8" y="840.8" width="6.6" height="4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1458.3" y="841.3" width="5.6" height="3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>iostream::vf00_sub14 @ 0x0061e187
-43 bytes — Classified (class/role known)</title></rect>
+<rect x="1458.3" y="841.3" width="5.6" height="3" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>iostream::vf00_sub14 @ 0x0061e187
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 <g><title>istream: 1 functions</title><rect x="1464.4" y="836.8" width="3.3" height="8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1464.9" y="837.3" width="2.3" height="7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>istream::vf00_subc @ 0x0061e2e5
-43 bytes — Classified (class/role known)</title></rect>
+<rect x="1464.9" y="837.3" width="2.3" height="7" fill="#7d8590" stroke="#ffffff" stroke-width="0.3"><title>istream::vf00_subc @ 0x0061e2e5
+43 bytes — C runtime, provided by the platform library (not reimplemented)</title></rect>
 </g>
 </g>
 <g><rect x="1177" y="846.8" width="292.8" height="153.2" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>

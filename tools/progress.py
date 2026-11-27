@@ -53,6 +53,10 @@ STATUS_STYLE = {
     "unknown": ("Not looked at", "#c9ccd1"),
     "classified": ("Classified (class/role known)", "#e8a39b"),
     "identified": ("Identified (purpose known)", "#f2c86b"),
+    # C runtime the standalone build takes from the platform's C library
+    # (inventory status platform, re/crt_dependencies.md): understood, never
+    # reimplemented or verified.
+    "platform": ("C runtime, provided by the platform library (not reimplemented)", "#7d8590"),
     "reimplemented": ("Reimplemented, not verified", "#a9d18e"),
     "verified_unmeasured": ("Verified by tests, no whole-game check yet", "#a8c8e6"),
     "verified_tests": ("Verified by tests only (never called in a whole-game check)", "#4f8fc0"),
@@ -151,7 +155,8 @@ def history(sizes, baseline):
             continue
         verified = [a for a, r in rows.items() if r.get("status") == "verified" and a in sizes]
         understood = [a for a, r in rows.items()
-                      if r.get("status") in ("identified", "reimplemented", "verified") and a in sizes]
+                      if r.get("status") in ("identified", "platform", "reimplemented", "verified")
+                      and a in sizes]
         calls = subprocess.run(["git", "show", f"{commit}:re/whole_game_calls.csv"],
                                cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         if calls.returncode == 0:
@@ -220,6 +225,7 @@ SUMMARY_BUCKETS = (
     ("Reimplemented, not verified yet", ("reimplemented",), "#a9d18e", "#1e2924"),
     ("Understood, not reimplemented yet", ("identified",), "#f2c86b", "#1e2924"),
     ("Not understood yet", ("classified", "unknown"), "#e8a39b", "#1e2924"),
+    ("C runtime, provided by the platform library", ("platform",), "#7d8590", "#ffffff"),
 )
 GAME_CATEGORIES = ("game", "unidentified")
 
@@ -229,15 +235,19 @@ def svg_summary(tree, width, esc, fmt) -> tuple[list[str], int]:
     code), each segment labelled with its own share, plus a legend.
     Returns the SVG elements and their height."""
     scopes = []
-    for label, categories in (("Game code", GAME_CATEGORIES), ("All code", tuple(tree))):
+    for label, categories, skip in (("Game code", GAME_CATEGORIES, ()),
+                                    ("All code", tuple(tree), ()),
+                                    ("Excl. platform", tuple(tree), ("platform",))):
         size = collections.Counter()
         for category in categories:
             for functions in tree.get(category, {}).values():
                 for _, _, status, s in functions:
-                    size[status] += s
+                    if status not in skip:
+                        size[status] += s
         scopes.append((label, size, sum(size.values()) or 1))
     all_size = scopes[1][1]
-    buckets = [b for b in SUMMARY_BUCKETS if b[1] != ("reimplemented",) or all_size["reimplemented"]]
+    buckets = [b for b in SUMMARY_BUCKETS if b[1] not in (("reimplemented",), ("platform",))
+               or all_size[b[1][0]]]
     game_label, game_size, game_total = scopes[0]
     verified = sum(game_size[s] for s in VERIFIED_STATUSES)
     out = [f'<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">'
@@ -264,6 +274,8 @@ def svg_summary(tree, width, esc, fmt) -> tuple[list[str], int]:
     x = bar_x
     y += 8
     for name, statuses, colour, _ in buckets:
+        if x + 24 + 9.2 * len(name) > width - 24:  # wrap the legend
+            x, y = bar_x, y + 28
         out.append(f'<rect x="{fmt(x)}" y="{y}" width="16" height="16" fill="{colour}"/>'
                    f'<text x="{fmt(x + 24)}" y="{y + 14}" font-size="19" fill="#1e2924">{esc(name)}</text>')
         x += 24 + 9.2 * len(name) + 36
@@ -435,6 +447,10 @@ def main() -> int:
           f"tests only: {count['verified_tests']} "
           f"({sum(1 for e in evidence.values() if e['via'])} of them may run uncounted inside "
           f"our replacements); no whole-game check yet: {count['verified_unmeasured']}")
+    rest = total - size["platform"]
+    print(f"platform library (C runtime, not reimplemented): {count['platform']} functions, "
+          f"{size['platform']:,} bytes; verified excluding it: {verified_size:,} of {rest:,} bytes "
+          f"({100 * verified_size / rest:.2f}%)")
     print(f"wrote {OUT_DIR / 'progress.svg'} and {OUT_DIR / 'progress-data.js'}")
     return 0
 

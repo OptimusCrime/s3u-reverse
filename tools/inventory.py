@@ -36,6 +36,12 @@ Columns of re/functions.csv:
                reimplemented = our replacement exists (S3RE_HOOK_UNVERIFIED) but
                                there is no verification evidence yet
                verified      = differential tests prove it matches the original
+               platform      = category crt only: an MSVC 6 C runtime function
+                               the game's behaviour does not depend on; the
+                               standalone build uses the platform's C library
+                               instead (re/crt_dependencies.md). Counts as
+                               understood, never as reimplemented or
+                               verified; hook none, no verified_by.
   hook         none | passthrough (logs, then calls the original)
                     | replaced (S3RE_HOOK: our reimplementation runs instead;
                       requires status verified)
@@ -77,7 +83,7 @@ SOURCE_DIR = ROOT / "src"
 COLUMNS = ["address", "name", "category", "status", "hook", "verified_by", "source_file",
            "notes"]
 CATEGORIES = ("game", "crt", "stl", "mfc", "watcom", "thirdparty", "compiler")
-STATUSES = ("classified", "identified", "reimplemented", "verified")
+STATUSES = ("classified", "identified", "platform", "reimplemented", "verified")
 HOOKS = ("none", "passthrough", "replaced", "unverified")
 
 ADDRESS_RE = re.compile(r"0x[0-9a-f]{8}")
@@ -174,6 +180,11 @@ def check() -> int:
             errors.append(f"{where}: hook '{row['hook']}' requires status '{required_status}'")
 
         tests = row["verified_by"].split()
+        if row["status"] == "platform":
+            if row["category"] != "crt":
+                errors.append(f"{where}: status 'platform' is only for category 'crt'")
+            if row["hook"] != "none" or tests:
+                errors.append(f"{where}: status 'platform' requires hook 'none' and no verified_by")
         if row["status"] == "verified" and not tests:
             errors.append(f"{where}: status 'verified' requires verified_by test names")
         for test in tests:
@@ -243,8 +254,16 @@ def stats() -> int:
 
     line("Named:", len(rows))
     line("Understood:", sum(1 for row in rows if row["status"] != "classified"))
+    platform = sum(1 for row in rows if row["status"] == "platform")
+    print(f"{'':<11}(understood includes {platform} C runtime functions provided by the "
+          "platform library)")
     line("Reimpl.:", sum(1 for row in rows if row["status"] in ("reimplemented", "verified")))
     line("Verified:", sum(1 for row in rows if row["status"] == "verified"))
+    line("Platform:", platform)
+    others = total - platform
+    verified = sum(1 for row in rows if row["status"] == "verified")
+    print(f"Verified excluding the platform library: {verified} / {others} "
+          f"({100 * verified / others:.2f}%)")
 
     import whole_game
     evidence = whole_game.classify()

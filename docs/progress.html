@@ -169,10 +169,10 @@
   <div class="controls">
     <label>Show <select id="evFilter">
       <option value="all">all verified</option>
-      <option value="6">identical in a whole-game check</option>
-      <option value="5" selected>tests only</option>
+      <option value="7">identical in a whole-game check</option>
+      <option value="6" selected>tests only</option>
       <option value="via">tests only, may run inside our replacements</option>
-      <option value="4">no whole-game check yet</option>
+      <option value="5">no whole-game check yet</option>
     </select></label>
     <label>Name or address <input id="evSearch" type="search" placeholder="filter"></label>
     <span class="muted" id="evCount"></span>
@@ -196,15 +196,17 @@ const STATUS = [  // index = status code in the data file (data.statuses)
   { key: "unknown",             label: "Not looked at",                                      color: "#c9ccd1" },
   { key: "classified",          label: "Classified (class/role known)",                      color: "#e8a39b" },
   { key: "identified",          label: "Identified (purpose known)",                         color: "#f2c86b" },
+  { key: "platform",            label: "C runtime, provided by the platform library (not reimplemented)", color: "#7d8590" },
   { key: "reimplemented",       label: "Reimplemented, not verified",                        color: "#a9d18e" },
   { key: "verified_unmeasured", label: "Verified by tests, no whole-game check yet",         color: "#a8c8e6" },
   { key: "verified_tests",      label: "Verified by tests only (never called in a whole-game check)", color: "#4f8fc0" },
   { key: "verified_game",       label: "Verified, and identical in a whole-game check",      color: "#3d9a50" },
 ];
-const IDENTIFIED = 2;     // codes >= IDENTIFIED are "understood"
-const VERIFIED = 4;       // codes >= VERIFIED are verified
-const BEST_FIRST = [6, 5, 4, 3, 2, 1, 0];  // status codes, best first (treemap legend, hover-card bars)
-const VERIFIED_GAME = 6;  // ... and seen in a whole-game check
+const IDENTIFIED = 2;     // codes >= IDENTIFIED are "understood" (platform counts as understood)
+const PLATFORM = 3;       // C runtime the standalone build takes from the platform library
+const VERIFIED = 5;       // codes >= VERIFIED are verified
+const BEST_FIRST = [7, 6, 5, 4, 2, 1, 0, 3];  // status codes, best first, platform last (treemap legend, hover-card bars)
+const VERIFIED_GAME = 7;  // ... and seen in a whole-game check
 const CATEGORY_LABEL = {
   game: "Game code (Blue Byte)",
   unidentified: "Not yet identified (probably game code)",
@@ -458,18 +460,18 @@ function sourcesText(sources) {
 }
 
 // ------------------------------------------------------------ summary
-// The top of the page groups the seven statuses into a few plain buckets.
+// The top of the page groups the eight statuses into a few plain buckets.
 // Both bars and the table below them show the same buckets in the same
 // order and colours; every number is the bucket's own share (they add up
 // to 100%), never a running total.
 const BUCKETS = [
-  { statuses: [6], color: STATUS[6].color, text: "#ffffff",
+  { statuses: [7], color: STATUS[7].color, text: "#ffffff",
     label: "Verified, and identical in a whole-game check",
     about: "Our code ran in a whole game and the game state matched the original's at every tick." },
-  { statuses: [5, 4], color: STATUS[5].color, text: "#ffffff",
+  { statuses: [6, 5], color: STATUS[6].color, text: "#ffffff",
     label: "Verified by tests only",
     about: "Matches the original in differential tests, but no whole-game check has called it yet." },
-  { statuses: [3], color: STATUS[3].color, text: "#1e2924", optional: true,
+  { statuses: [4], color: STATUS[4].color, text: "#1e2924", optional: true,
     label: "Reimplemented, not verified yet",
     about: "Our code exists but has no evidence yet; it only runs with --unverified." },
   { statuses: [2], color: STATUS[2].color, text: "#1e2924",
@@ -478,6 +480,10 @@ const BUCKETS = [
   { statuses: [1, 0], color: STATUS[1].color, text: "#1e2924",
     label: "Not understood yet",
     about: "At most its class or role is known." },
+  { statuses: [PLATFORM], color: STATUS[PLATFORM].color, text: "#ffffff", optional: true,
+    label: "C runtime, provided by the platform library",
+    about: "MSVC 6 runtime code the game's behaviour doesn't depend on (startup, heap, I/O, locale); " +
+           "never reimplemented, the standalone build uses the platform's C library (re/crt_dependencies.md)." },
 ];
 
 function summary() {
@@ -492,9 +498,11 @@ function summary() {
   const scopes = [
     { name: "Game code", sub: "Blue Byte's own code", count: gameCount, bytes: gameBytes },
     { name: "All code", sub: "also C runtime and libraries", count, bytes },
+    { name: "All code to reimplement", sub: "all code excluding the platform library",
+      count: count.map((n, k) => (k === PLATFORM ? 0 : n)), bytes: bytes.map((n, k) => (k === PLATFORM ? 0 : n)) },
   ];
   for (const scope of scopes) scope.total = scope.bytes.reduce((a, b) => a + b, 0) || 1;
-  const verifiedStatuses = [6, 5, 4];
+  const verifiedStatuses = [7, 6, 5];
   const buckets = BUCKETS.filter((b) => !b.optional || sum(count, b.statuses));
 
   document.getElementById("generated").innerHTML =
@@ -503,7 +511,8 @@ function summary() {
   document.getElementById("headNumber").textContent = pct(sum(game.bytes, verifiedStatuses), game.total, 1);
   document.getElementById("facts").innerHTML =
     `${fmt(sum(game.count, verifiedStatuses))} of the game's ${fmt(game.count.reduce((a, b) => a + b, 0))} functions ` +
-    `are verified (${fmt(sum(count, verifiedStatuses))} of ${fmt(data.functions.length)} counting libraries).`;
+    `are verified (${fmt(sum(count, verifiedStatuses))} of ${fmt(data.functions.length)} counting libraries; ` +
+    `${fmt(count[PLATFORM])} C runtime functions are left to the platform library).`;
 
   document.getElementById("bars").innerHTML = scopes.map((scope) => {
     const segments = buckets.map((b) => {
@@ -531,7 +540,7 @@ function summary() {
     `<tr class="total"><td>Reimplemented and verified</td>` +
     scopes.map((s) => cell(s, verifiedStatuses)).join("") + "</tr>";
 
-  // the treemap's legend in "status" mode: all seven statuses, of all code
+  // the treemap's legend in "status" mode: all eight statuses, of all code
   const totalBytes = bytes.reduce((a, b) => a + b, 0);
   COLOUR_MODES.status.legend = '<ul class="statuslist">' + BEST_FIRST.filter((k) => count[k]).map((k) =>
     `<li title="${fmt(bytes[k])} bytes"><span class="swatch" style="background:${STATUS[k].color}"></span>` +
@@ -575,7 +584,7 @@ const EV_COLUMNS = [  // [title, value for sorting, cell html, class]
   ["Function", (f) => f.name, (f) => esc(f.name), "l"],
   ["Bytes", (f) => f.size, (f) => fmt(f.size), ""],
   ["Evidence", (f) => f.status, (f) => `<span class="swatch" style="background:${STATUS[f.status].color}"></span>` +
-     ({ 4: "not checked", 5: "tests only", 6: "whole game" })[f.status], "l"],
+     ({ 5: "not checked", 6: "tests only", 7: "whole game" })[f.status], "l"],
   ["Whole-game calls", (f) => (f.calls === null ? -1 : f.calls), (f) => (f.calls === null ? "–" : fmt(f.calls)), ""],
   ["Checks", (f) => Object.keys(f.sources).length, (f) => esc(sourcesText(f.sources)) || "–", "l wrap"],
   ["May run inside", (f) => f.via.length, (f) => esc(f.via.join(", ")), "l wrap"],
@@ -589,7 +598,7 @@ function evidenceList() {
   const filter = document.getElementById("evFilter").value;
   const search = document.getElementById("evSearch").value.trim().toLowerCase();
   const rows = all.filter((f) =>
-    (filter === "all" || (filter === "via" ? f.status === 5 && f.via.length : f.status === Number(filter))) &&
+    (filter === "all" || (filter === "via" ? f.status === 6 && f.via.length : f.status === Number(filter))) &&
     (!search || f.name.toLowerCase().includes(search) || hex(f.address).includes(search)));
   const [column, direction] = evSort;
   const key = EV_COLUMNS[column][1];

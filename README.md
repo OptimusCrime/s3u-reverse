@@ -110,11 +110,13 @@ has been reimplemented and verified. Show a summary with:
 python tools/inventory.py stats
 ```
 
-The picture below starts with the headline share and two stacked bars
-(game code, and all code including libraries): green = verified and
-identical to the original in a whole-game check, blue = verified by tests
-only, yellow = understood but not reimplemented yet, red = not understood
-yet. Under it, the treemap shows every function in `S3.EXE` as a box,
+The picture below starts with the headline share and three stacked bars
+(game code, all code including libraries, and all code excluding the
+platform library): green = verified and identical to the original in a
+whole-game check, blue = verified by tests only, yellow = understood but
+not reimplemented yet, red = not understood yet, grey = C runtime code
+the game doesn't depend on, left to the platform's C library and never
+reimplemented (`re/crt_dependencies.md`). Under it, the treemap shows every function in `S3.EXE` as a box,
 sized by its code size, in the same colours. `docs/progress.html` is the interactive
 version (hover details, click to zoom, totals, history), published at
 <https://optimuscrime.github.io/s3u-reverse/>; locally, open it in a

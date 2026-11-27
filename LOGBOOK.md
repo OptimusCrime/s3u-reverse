@@ -27,9 +27,9 @@ against the original: all identical; session 58 entry).
    DrawPanel and QueueSettler); it needs the landscape renderer
    Render_sub_54cbd0 0x54cbd0 first (with the CLandscapeSurface ctor
    0x54bd30 and the CGameDrawer ctor/dtor leftovers).
-2. **CRT "platform library" status** (CLAUDE.md "Library and compiler
-   code", backlog `docs/todo/evidence.md`): the status for the CRT
-   functions the game doesn't depend on, counted apart from verified.
+2. **CRT "platform library" status: done** (session 58 entry): 300 crt
+   rows `platform`, 206 stay candidates (re/crt_dependencies.md); left:
+   name and verify the candidates (backlog `docs/todo/evidence.md`).
 3. The 28 odd static-initializer stubs that tools/static_inits.py's
    classes don't cover.
 4. The png_read_* in-process test that hangs (backlog
@@ -207,6 +207,18 @@ against the merge base; no row was changed on both sides except
 - Numbers (progress.py): verified 12,829 functions, game code 45.5 %
   verified (headline; 37.5 % in a whole game), all code 54.05 % of the
   bytes; identical in a whole-game check 11,693 functions (44.46 %).
+
+- **CRT "platform library" status** (CLAUDE.md "Library and compiler
+  code"): new inventory status `platform` (category crt only, hook none;
+  understood, never reimplemented/verified). `tools/crt_dependencies.py`
+  splits the 506 crt rows by the call graph of build/s3.asm: 206
+  candidates (115 referenced from non-crt code, plus their OS-free crt
+  callees and named rows), 300 `platform` (startup/exit, heap internals,
+  locks, low-level I/O, locale, SEH runtime, iostream internals); list
+  and reasons in re/crt_dependencies.md. inventory.py stats and
+  progress.py/progress.html show it apart (grey, third bar "excluding the
+  platform library"): all code verified 54.05% of bytes, 55.26% excluding
+  the platform library (49,800 bytes).
 
 ### 2026-11-26/27 (57): merges of rounds 4-5, static-initializer stubs, milestone evidence
 

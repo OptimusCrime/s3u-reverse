@@ -169,9 +169,9 @@ game code, in dedicated batches (compiler stubs table-driven, specs
 generated). The statically linked MSVC 6 C runtime is not rewritten
 wholesale: functions whose behaviour the game depends on (`_ftol`,
 operator new/delete, memmove, string formatting, sorting, anything the
-simulation calls) are verified; the rest get a separate status
+simulation calls) are verified; the rest get status `platform`
 ("provided by the platform library", counted apart from verified;
-backlog `docs/todo/evidence.md`).
+the split and its rule: `re/crt_dependencies.md`, `tools/crt_dependencies.py`).
 
 Rejected alternatives: a from-scratch rewrite can't prove equivalence. Matching
 decompilation (byte-identical recompile with MSVC 6) is too slow for this much
