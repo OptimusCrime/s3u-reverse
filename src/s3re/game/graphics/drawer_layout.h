@@ -91,6 +91,16 @@ struct CDrawer {
                                                       //           (CDrawer::QueueCellObject 0x4d5a50)
     void* sound;                                      // +0x05f6bc the CSoundData of the drawing's sound effects
                                                       //           (PlayAmbientSounds 0x4c7730, CDrawer::QueueLandscapeObject 0x4d3050)
+    void* primary_surface;                            // +0x05f6c0 the surfaces CDrawer::InitSurfaces 0x42e4xx creates
+    void* back_surface;                               // +0x05f6c4  (primary = the flip surface, DoFlip 0x42cd70);
+    void* draw_surface;                               // +0x05f6c8  ReleaseSurfaces 0x42caa0 forgets all four
+    void* surface_5f6cc;                              // +0x05f6cc
+    std::uint8_t unk05f6d0[0x5f6d5 - 0x5f6d0];
+    std::uint8_t software_cursor;                     // +0x05f6d5 the cursor is drawn into mouse_surface (else Windows' cursor)
+    std::uint8_t unk05f6d6[0x5f6d8 - 0x5f6d6];
+    void* mouse_surface;                              // +0x05f6d8 the Dirk::CMouseSurface of the software cursor
+    std::int32_t cursor_id;                           // +0x05f6dc the current mouse cursor (0..8; -1 none), SetMouseCursor 0x42cb60
+    void* text_surface;                               // +0x05f6e0 the Dirk::CTextSurface the panel texts are drawn into
 };
 
 #pragma pack(pop)
@@ -119,6 +129,12 @@ static_assert(offsetof(CDrawer, ambient_right) == 0x5f5cc);
 static_assert(offsetof(CDrawer, ambient_count) == 0x5f610);
 static_assert(offsetof(CDrawer, graphics) == 0x5f6b8);
 static_assert(offsetof(CDrawer, sound) == 0x5f6bc);
+static_assert(offsetof(CDrawer, primary_surface) == 0x5f6c0);
+static_assert(offsetof(CDrawer, surface_5f6cc) == 0x5f6cc);
+static_assert(offsetof(CDrawer, software_cursor) == 0x5f6d5);
+static_assert(offsetof(CDrawer, mouse_surface) == 0x5f6d8);
+static_assert(offsetof(CDrawer, cursor_id) == 0x5f6dc);
+static_assert(offsetof(CDrawer, text_surface) == 0x5f6e0);
 
 template <typename T>
 CDrawer* DrawerOf(T* self) {

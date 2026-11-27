@@ -56,6 +56,17 @@ struct DSErrorName {
 static_assert(sizeof(DSErrorName) == 8);
 inline constexpr GameGlobal<const DSErrorName[16]> g_dsErrorNames{0x7a0b80};
 
+// CDrawer::SetMouseCursor (0x42cb60): per mouse cursor id (0..8) the
+// resource id posted to the game window (message 0x802) when Windows draws
+// the cursor. A cursor that is not listed reads the dword after the table.
+struct CursorResource {
+    std::int32_t cursor;     // 0x00 the cursor id
+    std::uint32_t resource;  // 0x04 0x73, 0x70, 0x71, 0x8d, 0x89, 0x8a, 0x8b, 0x8c, 0x88
+};
+static_assert(sizeof(CursorResource) == 8);
+constexpr std::size_t kCursorResourceCount = 9;
+inline constexpr GameGlobal<const CursorResource[kCursorResourceCount]> g_cursorResources{0x656a58};
+
 #pragma pack(pop)
 
 // ------------------------------------------------------------ map and movement

@@ -1,26 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">40.2%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">40.3%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="450.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 32.1%</title></rect>
 <text x="395.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">32.1%</text>
-<rect x="620.7" y="100" width="114.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.2%</title></rect>
-<text x="678.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.2%</text>
-<rect x="735.5" y="100" width="236.8" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 16.8%</title></rect>
-<text x="853.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">16.8%</text>
-<rect x="972.3" y="100" width="603.7" height="40" fill="#e8a39b"><title>Not understood yet: 42.9%</title></rect>
-<text x="1274.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.9%</text>
+<rect x="620.7" y="100" width="116.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.3%</title></rect>
+<text x="678.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.3%</text>
+<rect x="736.9" y="100" width="236.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 16.8%</title></rect>
+<text x="855" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">16.8%</text>
+<rect x="973.2" y="100" width="602.8" height="40" fill="#e8a39b"><title>Not understood yet: 42.9%</title></rect>
+<text x="1274.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.9%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="545.9" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 38.8%</title></rect>
 <text x="442.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">38.8%</text>
-<rect x="715.9" y="154" width="126.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.0%</title></rect>
-<text x="779.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.0%</text>
-<rect x="842.6" y="154" width="0.9" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.1%</title></rect>
-<rect x="843.5" y="154" width="224.8" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 16.0%</title></rect>
-<text x="955.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">16.0%</text>
-<rect x="1068.3" y="154" width="507.7" height="40" fill="#e8a39b"><title>Not understood yet: 36.1%</title></rect>
-<text x="1322.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.1%</text>
+<rect x="715.9" y="154" width="127.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.1%</title></rect>
+<text x="779.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.1%</text>
+<rect x="843.5" y="154" width="0.9" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.1%</title></rect>
+<rect x="844.5" y="154" width="224.4" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 16.0%</title></rect>
+<text x="956.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">16.0%</text>
+<rect x="1068.9" y="154" width="507.1" height="40" fill="#e8a39b"><title>Not understood yet: 36.1%</title></rect>
+<text x="1322.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.1%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#a9d18e"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Reimplemented, not verified yet</text>
@@ -28,7 +28,7 @@
 <rect x="1578.4" y="216" width="16" height="16" fill="#e8a39b"/><text x="1602.4" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1107.1" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 40.2% verified (32.1% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 40.3% verified (32.1% in a whole game)</text>
 <g><title>(free functions): 909 functions</title><rect x="2" y="19" width="481.6" height="646.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="311.8" height="154.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -2599,8 +2599,8 @@
 400 bytes — Classified (class/role known)</title></rect>
 <rect x="659.6" y="371.4" width="17.1" height="14.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::QueueCellObject @ 0x004d5a50
 384 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="659.6" y="385.6" width="17.1" height="13.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::SetMouseCursor @ 0x0042cb60
-366 bytes — Classified (class/role known)</title></rect>
+<rect x="659.6" y="385.6" width="17.1" height="13.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::SetMouseCursor @ 0x0042cb60
+366 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="676.7" y="356.5" width="12.9" height="14.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::QueueSprite @ 0x004d7e10
 288 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="676.7" y="370.7" width="12.9" height="14.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::QueueSpritePart @ 0x004d7f30
@@ -2619,8 +2619,8 @@
 192 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="689.6" y="389.3" width="12.4" height="9.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::QueueShadowPart @ 0x004d7d50
 192 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="701.9" y="369.6" width="11.3" height="8.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::ReleaseSurfaces @ 0x0042caa0
-144 bytes — Classified (class/role known)</title></rect>
+<rect x="701.9" y="369.6" width="11.3" height="8.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::ReleaseSurfaces @ 0x0042caa0
+144 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="713.3" y="369.6" width="9" height="8.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::DoFlip @ 0x0042cd70
 114 bytes — Identified (purpose known)</title></rect>
 <rect x="701.9" y="377.6" width="10.2" height="7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::AddHitArea @ 0x004d8240
@@ -2635,14 +2635,14 @@
 96 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="718.3" y="384.6" width="4" height="7.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::ApplyScreenLayout @ 0x004c6d40
 48 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="710.3" y="392.3" width="4.5" height="6.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::RestoreSurfaces @ 0x0042cb30
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="710.3" y="392.3" width="4.5" height="6.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::RestoreSurfaces @ 0x0042cb30
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="714.8" y="392.3" width="5.9" height="3.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::scalar_deleting_destructor @ 0x0042c9b0
 32 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="714.8" y="395.7" width="5.9" height="3.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::SetConfiguredDisplayMode @ 0x0042ca70
-32 bytes — Classified (class/role known)</title></rect>
-<rect x="720.7" y="392.3" width="1.5" height="6.8" fill="#e8a39b"><title>CDrawer::CreateSurfaces @ 0x0042ca90
-16 bytes — Classified (class/role known)</title></rect>
+<rect x="714.8" y="395.7" width="5.9" height="3.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawer::SetConfiguredDisplayMode @ 0x0042ca70
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="720.7" y="392.3" width="1.5" height="6.8" fill="#a8c8e6"><title>CDrawer::CreateSurfaces @ 0x0042ca90
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>AI: 141 functions</title><rect x="722.7" y="247.6" width="199.8" height="152.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="724.7" y="256.1" font-size="8.5" fill="#ffffff">AI</text>
@@ -5370,16 +5370,16 @@
 64 bytes — Identified (purpose known)</title></rect>
 <rect x="854.8" y="866.5" width="4.8" height="6.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::scalar_deleting_destructor @ 0x005b6070
 48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="859.6" y="866.5" width="4.8" height="6.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::Start @ 0x005b6130
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="859.6" y="866.5" width="4.8" height="6.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::Start @ 0x005b6130
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="854.8" y="872.9" width="6" height="5.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::RequestStop @ 0x005b64f0
 48 bytes — Identified (purpose known)</title></rect>
 <rect x="854.8" y="878.1" width="6" height="3.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::OnExit @ 0x005b6470
 32 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="860.8" y="872.9" width="3.6" height="5.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::RequestQuit @ 0x005b6490
 32 bytes — Identified (purpose known)</title></rect>
-<rect x="860.8" y="878.7" width="3.6" height="2.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::OnActivate @ 0x005b6520
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="860.8" y="878.7" width="3.6" height="2.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::OnActivate @ 0x005b6520
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>Win32::COutOfMemory: 4 functions</title><rect x="831.4" y="882" width="33.6" height="29" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="831.9" y="882.5" width="16.7" height="28" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>Win32::COutOfMemory::COutOfMemory @ 0x006124a0
@@ -6190,20 +6190,20 @@
 <g><title>CDrawThread: 9 functions</title><rect x="962.6" y="833" width="21.4" height="22.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="963.1" y="833.5" width="10.9" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::OnStart @ 0x0042c390
 127 bytes — Identified (purpose known)</title></rect>
-<rect x="974" y="833.5" width="9.6" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::CreateDrawer @ 0x0042c6a0
-112 bytes — Identified (purpose known)</title></rect>
-<rect x="963.1" y="840.9" width="9.5" height="7.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::Draw @ 0x0042c710
-112 bytes — Classified (class/role known)</title></rect>
-<rect x="963.1" y="848.3" width="9.5" height="6.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::FetchDrawData @ 0x0042c780
-96 bytes — Classified (class/role known)</title></rect>
-<rect x="972.6" y="840.9" width="5.5" height="7.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::CDrawThread @ 0x0042c2d0
-64 bytes — Classified (class/role known)</title></rect>
-<rect x="978.1" y="840.9" width="5.5" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::Setup @ 0x0042c350
-64 bytes — Identified (purpose known)</title></rect>
+<rect x="974" y="833.5" width="9.6" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::CreateDrawer @ 0x0042c6a0
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="963.1" y="840.9" width="9.5" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::Draw @ 0x0042c710
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="963.1" y="848.3" width="9.5" height="6.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::FetchDrawData @ 0x0042c780
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="972.6" y="840.9" width="5.5" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::CDrawThread @ 0x0042c2d0
+64 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="978.1" y="840.9" width="5.5" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::Setup @ 0x0042c350
+64 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="972.6" y="848.3" width="4.7" height="6.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::scalar_deleting_destructor @ 0x0042c310
 48 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="977.3" y="848.3" width="6.3" height="4.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::OnExit @ 0x0042c670
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="977.3" y="848.3" width="6.3" height="4.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::OnExit @ 0x0042c670
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="977.3" y="853.1" width="6.3" height="1.6" fill="#e8a39b"><title>CDrawThread::SignalFrameDone @ 0x0042c810
 16 bytes — Classified (class/role known)</title></rect>
 </g>
@@ -6562,22 +6562,22 @@
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>DirectX::CGameDrawThread: 9 functions</title><rect x="980.2" y="911.5" width="16.9" height="18.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="980.7" y="912" width="9.4" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::OnStart @ 0x005b65d0
-113 bytes — Identified (purpose known)</title></rect>
-<rect x="990.1" y="912" width="6.5" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::Step @ 0x005b66a0
-78 bytes — Identified (purpose known)</title></rect>
-<rect x="980.7" y="919.4" width="7" height="5.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::CGameDrawThread @ 0x005b6530
-64 bytes — Classified (class/role known)</title></rect>
+<rect x="980.7" y="912" width="9.4" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::OnStart @ 0x005b65d0
+113 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="990.1" y="912" width="6.5" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::Step @ 0x005b66a0
+78 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="980.7" y="919.4" width="7" height="5.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::CGameDrawThread @ 0x005b6530
+64 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="980.7" y="925" width="7" height="4.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::scalar_deleting_destructor @ 0x005b6570
 48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="987.6" y="919.4" width="5.4" height="5.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::OnExit @ 0x005b6670
-48 bytes — Identified (purpose known)</title></rect>
-<rect x="993" y="919.4" width="3.6" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::~CGameDrawThread @ 0x005b65a0
-32 bytes — Classified (class/role known)</title></rect>
-<rect x="987.6" y="924.9" width="4.5" height="4.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::OnActivate @ 0x005b6710
-32 bytes — Identified (purpose known)</title></rect>
-<rect x="992.1" y="924.9" width="2.2" height="4.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::StartWithWindow @ 0x005b65c0
-16 bytes — Classified (class/role known)</title></rect>
+<rect x="987.6" y="919.4" width="5.4" height="5.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::OnExit @ 0x005b6670
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="993" y="919.4" width="3.6" height="5.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::~CGameDrawThread @ 0x005b65a0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="987.6" y="924.9" width="4.5" height="4.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::OnActivate @ 0x005b6710
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="992.1" y="924.9" width="2.2" height="4.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::StartWithWindow @ 0x005b65c0
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="994.3" y="924.9" width="2.2" height="4.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameDrawThread::RequestFullRedraw @ 0x005b6730
 16 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>

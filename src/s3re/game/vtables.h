@@ -35,6 +35,10 @@ inline constexpr std::uint32_t kCThread = 0x65d710;            // Win32::CThread
 inline constexpr std::uint32_t kCThread_sub4 = 0x65d704;       // its waitable part at +4
 inline constexpr std::uint32_t kCGameThread = 0x65ca04;        // DirectX::CGameThread
 inline constexpr std::uint32_t kCGameThread_sub4 = 0x65c9f8;   // its handle part at +4
+inline constexpr std::uint32_t kCGameDrawThread = 0x65ca40;       // DirectX::CGameDrawThread
+inline constexpr std::uint32_t kCGameDrawThread_sub4 = 0x65ca34;  // its handle part at +4
+inline constexpr std::uint32_t kCDrawThread = 0x656ab0;           // CDrawThread (the in-game draw thread)
+inline constexpr std::uint32_t kCDrawThread_sub4 = 0x656aa4;      // its handle part at +4
 inline constexpr std::uint32_t kCLogicThread = 0x65a14c;       // CLogicThread
 inline constexpr std::uint32_t kCLogicThread_sub4 = 0x65a140;  // its handle part at +4
 inline constexpr std::uint32_t kCWin32WaitableBag = 0x65733c;  // Win32::CWin32WaitableBag<CWin32Waitable>
@@ -362,6 +366,7 @@ inline constexpr std::uintptr_t kCMMExceptionPointer = 0x682f68;   // Win32::CMM
 // Type descriptors (catch types).
 namespace type_descriptor {
 inline constexpr std::uintptr_t kCTimeoutPointer = 0x698e98;  // ".PAVCTimeout@Win32@@" (ExecuteCommands' catch)
+inline constexpr std::uintptr_t kCAppNotActiveExceptionPointer = 0x698dd0;  // ".PAVCAppNotActiveException@DirectX@@" (CGameDrawThread::Step's catch)
 inline constexpr std::uintptr_t kCHResultPointer = 0x6968d8;  // ".PAVCHResult@Win32@@" (CMapFileStream's catches)
 inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x69f908;  // ".PAVCFileNotFound@Win32@@" (CMapFileStream::Open)
 // ".PAVCDirectSoundException@DirectX@@" (CSoundData::Open's and Restore's catches)

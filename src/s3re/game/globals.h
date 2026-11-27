@@ -294,6 +294,9 @@ inline constexpr GameGlobal<std::int32_t> g_unk730f50{0x730f50};
 inline constexpr GameGlobal<std::int32_t> g_unk7deb4c{0x7deb4c};
 // The pathfinder's progress marker (pathing.h, PathPhase).
 inline constexpr GameGlobal<volatile std::uint32_t> g_pathPhase{0x7a9d98};
+// Logged with g_pathPhase by CDrawThread's "DRAW: Kein Daten %i %i"
+// (0x42c746, 0x42c7e0); no code writes it by address (meaning unknown).
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd28{0x7dfd28};
 
 // ------------------------------------------------------------ settings
 // The settings of the current game.
@@ -321,6 +324,10 @@ inline constexpr GameGlobal<std::uint32_t[2]> g_buildInfo{0x7a8000};
 // ------------------------------------------------------------ graphics and minimap
 // The loaded graphics (gfx::CGraphicsData, game/graphics/gfx_layout.h).
 inline constexpr GameGlobal<gfx::CGraphicsData*> g_gfxData{0x7a8010};
+// Dirk::Globals::lpGraphicsDataLock (re/ui_classes.md): a Win32::CSemaphore
+// (created in 0x405630); CDrawer::ReleaseSurfaces 0x42caa0 waits on it
+// (slot 0, Wait(5000, 1)) before closing the graphics data.
+inline constexpr GameGlobal<void*> g_graphicsDataLock{0x7a800c};
 // The screen's pixel format (shifts at 0x7dfba0, scales at 0x7dfbac).
 inline constexpr GameGlobal<PixelFormat> g_pixelFormat{0x7dfba0};
 // Width and height of the game view in pixels.

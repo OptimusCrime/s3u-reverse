@@ -711,4 +711,11 @@ inline constexpr GameText kGameThreadCoInitOpen{0x79df58};    // "CGameThread::~
 inline constexpr GameText kDrawBuildingFile{0x69ff80};           // "E:\Siedler3\Volker\DrawBuilding.cpp"
 inline constexpr GameText kBuildingPhaseUndefined{0x69ff60};     // "Gebäudebauphase nicht definiert" (Latin-1)
 inline constexpr GameText kBuildingPhaseUndefinedLog{0x69ffa4};  // "! Gebäudebauphase nicht definiert: %u"
+// ------------------------------------------------------------ wip/cursor-r7 batch
+// CSurface::CheckResult's name for Unlock (CDrawer::SetMouseCursor; the same line as wip/text-r6's).
+inline constexpr GameText kDDUnlock{0x697e7c};             // "CSurface::DDUnlock"
+// CGameDrawThread::OnStart's out-of-memory check (DirectX\Gamebase.cpp line 506).
+inline constexpr GameText kDrawerNotNull{0x79dfb0};        // "lpDrawer"
+inline constexpr GameText kGamebaseFile{0x79df18};         // "E:\Siedler3\DirectX\Gamebase.cpp"
+inline constexpr GameText kDrawNoData{0x698e7c};           // "DRAW: Kein Daten %i %i" (CDrawThread::Draw, FetchDrawData)
 }  // namespace s3re::game::texts
