@@ -31,6 +31,7 @@
 //   0x004a8eb0 WCSkipListBase<KeyVal<int, HFONT>>                                     0x658814
 //   0x00609bb0 WCSkipListBase<KeyVal<unsigned int, Lobby::CLMMessageBlock>>           0x65d588
 //   0x00616050 WCValSkipListDict<HWND, Win32::CCDAudio*>                              0x65d968
+//   0x00616150 WCSkipListBase<..<HWND, Win32::CCDAudio*>> (the same body, libs-r7)     0x65d968
 // WCValSkipListDict<int, DirectX::CSoundEffectBuffer> (0x005c33e0): vtable
 //   0x65cf54, ~CDirectSoundBuffer (0x5c1fe0) of the key/value pair's buffer
 //   (+0x7c), then as above with 0x65cf70.
@@ -176,6 +177,9 @@ std::uint32_t __fastcall SkipListDestructor_609bb0(std::uint32_t self, void*) {
 std::uint32_t __fastcall SkipListDestructor_616050(std::uint32_t self, void*) {
     return DestroySkipList(self, vt::kWCSkipListBase_HWNDCDAudio);
 }
+std::uint32_t __fastcall SkipListDestructor_616150(std::uint32_t self, void*) {  // (libs-r7) the same body
+    return DestroySkipList(self, vt::kWCSkipListBase_HWNDCDAudio);
+}
 std::uint32_t __fastcall SkipListDestructor_609aa0(std::uint32_t self, void*) {
     Field(self, 0) = vt::kWCValSkipListDict_UIntMessageBlock;
     reinterpret_cast<ThisFn>(kMessageBlockDestroy)(self + kPairBuffer, nullptr);
@@ -266,6 +270,8 @@ S3RE_HOOK(0x00609bb0, SkipListDestructor_609bb0, SkipListDestroyFn, Original_Ski
           SkipListDestructor_609bb0);
 S3RE_HOOK(0x00616050, SkipListDestructor_616050, SkipListDestroyFn, Original_SkipListDestructor_616050,
           SkipListDestructor_616050);
+S3RE_HOOK(0x00616150, SkipListDestructor_616150, SkipListDestroyFn, Original_SkipListDestructor_616150,
+          SkipListDestructor_616150);
 S3RE_HOOK(0x00609aa0, SkipListDestructor_609aa0, SkipListDestroyFn, Original_SkipListDestructor_609aa0,
           SkipListDestructor_609aa0);
 S3RE_HOOK(0x00457a90, SkipListDestructor_457a90, SkipListDestroyFn, Original_SkipListDestructor_457a90,
@@ -319,6 +325,7 @@ const DestructorCase kDestructorCases[] = {
     {Original_SkipListDestructor_4a8eb0, &SkipListDestructor_4a8eb0},
     {Original_SkipListDestructor_609bb0, &SkipListDestructor_609bb0},
     {Original_SkipListDestructor_616050, &SkipListDestructor_616050},
+    {Original_SkipListDestructor_616150, &SkipListDestructor_616150},
     {Original_SkipListDestructor_609aa0, &SkipListDestructor_609aa0},
     {Original_SkipListDestructor_457a90, &SkipListDestructor_457a90},
     {Original_SkipListDestructor_499150, &SkipListDestructor_499150},

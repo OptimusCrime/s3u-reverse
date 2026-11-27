@@ -465,8 +465,8 @@ void __cdecl png_read_start_row(PngStruct* png) {
 // png_error, whose error callback here throws), random masks and passes,
 // with and without PNG_PACKSWAP. Compared: the row buffers with guard
 // bytes, row_info, the png_struct and the error messages.
-// png_read_start_row and png_read_finish_row are compared within whole PNG
-// decodes (png_read_tests.cpp).
+// png_read_start_row and png_read_finish_row: emulator specs only so far
+// (unverified; a whole-decode test is in the backlog, docs/todo/evidence.md).
 
 namespace {
 
@@ -579,6 +579,13 @@ S3RE_TEST(PngRowHelpers_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareRowHelpers(probe, {&WrongFilterRow, &png_combine_row, &png_do_read_interlace}, 6000);
     S3RE_EXPECT(probe.failures() > 0);
+}
+
+// For the emulator's self-test (tools/emutest/specs/self_test.py): the row
+// step leaving avail_out at 1 (next to the ignored zstream.next_out).
+void __cdecl WrongFinishRow(PngStruct* png) {
+    png_read_finish_row(png);
+    png->zstream.avail_out = 1;
 }
 
 }  // namespace s3re::thirdparty

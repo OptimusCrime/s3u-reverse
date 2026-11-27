@@ -321,6 +321,8 @@ inline constexpr std::uint32_t kCDropdown_element = 0x656600;  // CDropdown's CS
 inline constexpr std::uint32_t kCListBox_element = 0x6564a0;   // CListBox's CScreenElement part (+0x444)
 // wip/images-r4 batch: PaintLib (src/s3re/thirdparty/paintlib.cpp).
 inline constexpr std::uint32_t kCTextException = 0x65c0cc;
+inline constexpr std::uint32_t kCPNGDecoder = 0x65c0fc;     // PaintLib CPNGDecoder (libs-r7)
+inline constexpr std::uint32_t kCFileSource = 0x65c1a4;     // PaintLib CFileSource (libs-r7)
 inline constexpr std::uint32_t kCAnyBmp = 0x65c0dc;
 inline constexpr std::uint32_t kCPicDecoder = 0x65c110;
 inline constexpr std::uint32_t kCBmp = 0x65c124;

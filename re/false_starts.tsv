@@ -45,3 +45,4 @@
 0x00419b5f	CEditControl::OnLButtonDown	re/ui_classes.md
 0x00427cab	(UI range)	re/ui_classes.md
 0x0049859c	Menus::priv::CDrawer::InitSurfaces	re/ui_classes.md
+0x00460b2a	Menus::CNetThread::OpenSession	catch continuation inside 0x4605f0 (libs-r7 Watcom classification)

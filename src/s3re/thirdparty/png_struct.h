@@ -137,7 +137,11 @@ struct PngStruct {
     std::uint8_t pad17e[2];             // 0x17e
     std::uint8_t* trans;                // 0x180 png_handle_tRNS 0x5ace60
     PngColor16 trans_values;            // 0x184
-    std::uint8_t unk18e[0x1ec - 0x18e]; // 0x18e
+    std::uint8_t unk18e[0x190 - 0x18e]; // 0x18e
+    void* read_row_fn;                  // 0x190 called after each row (png_read_row 0x5a5440)
+    std::uint8_t unk194[0x1e4 - 0x194]; // 0x194
+    std::uint8_t* palette_lookup;       // 0x1e4 png_do_dither's (png_do_read_transformations 0x5a6c30)
+    std::uint8_t* dither_index;         // 0x1e8
     std::uint16_t* hist;                // 0x1ec png_handle_hIST 0x5ad860
     std::uint8_t unk1f0[0x20c - 0x1f0]; // 0x1f0
 };
@@ -159,6 +163,7 @@ static_assert(offsetof(PngStruct, gamma) == 0x154);
 static_assert(offsetof(PngStruct, sig_bit) == 0x174);
 static_assert(offsetof(PngStruct, trans) == 0x180);
 static_assert(offsetof(PngStruct, trans_values) == 0x184);
+static_assert(offsetof(PngStruct, read_row_fn) == 0x190);
 static_assert(offsetof(PngStruct, hist) == 0x1ec);
 static_assert(sizeof(PngStruct) == 0x20c);
 

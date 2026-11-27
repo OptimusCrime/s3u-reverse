@@ -660,6 +660,8 @@ inline constexpr GameGlobal<CreateFileMappingAImport> g_importCreateFileMappingA
 inline constexpr GameGlobal<MapViewOfFileImport> g_importMapViewOfFile{0x655188};
 inline constexpr GameGlobal<UnmapViewOfFileImport> g_importUnmapViewOfFile{0x655184};
 inline constexpr GameGlobal<GetLastErrorImport> g_importGetLastError{0x6550e8};
+using SetErrorModeImport = std::uint32_t(__stdcall*)(std::uint32_t mode);
+inline constexpr GameGlobal<SetErrorModeImport> g_importSetErrorMode{0x65517c};  // (libs-r7: CTextException's constructor)
 inline constexpr GameGlobal<GetSystemInfoImport> g_importGetSystemInfo{0x655200};
 inline constexpr GameGlobal<VirtualQueryImport> g_importVirtualQuery{0x6551fc};
 inline constexpr GameGlobal<VirtualProtectImport> g_importVirtualProtect{0x6550a8};

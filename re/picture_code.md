@@ -324,3 +324,45 @@ png_init_read_transformations, png_do_read_transformations; png_read_info,
 png_read_row, png_read_image, png_read_end, png_create_read_struct (setjmp);
 verification of png_read_start_row / finish_row; PaintLib DoDecode,
 MakeBmp/MakeBmpFromFile, raiseError, CTextException ctors, CFileSource.
+
+
+## Reimplementation (wip/libs-r7, 2026-11-27)
+
+Done and verified (src/s3re/thirdparty/): the chunk handlers cHRM, sRGB,
+zTXt, pCAL and png_set_pCAL (png_rutil_chunks2.cpp);
+png_do_read_transformations and png_do_gamma (png_rtran.cpp); PaintLib's
+CTextException constructor, CPNGDecoder constructor / destructors and
+CFileSource (constructor, destructors, Open, Close; paintlib2.cpp).
+Reimplemented, unverified (emulator specs with full coverage, no in-process
+test yet): png_read_info, png_read_row, png_read_image, png_read_end
+(png_read.cpp), png_read_start_row, png_read_finish_row. A whole-decode
+in-process test (PNG files made by the test, decoded by the six originals
+patched to their trampolines and by ours) hung in the original run's row
+phase on its first case; not found before the deadline (backlog).
+
+Findings:
+- png_handle_cHRM compares the blue point with the float 0.8f (0x65c5f4),
+  the other points with the double 0.8 (0x65c5f8); the chromaticities are
+  fild * 1e-5f rounded to float.
+- png_handle_sRGB checks png->gamma (not the info's) against 45000 with
+  _ftol(gamma * 100000.0f + 0.5).
+- png_handle_zTXt: the length of the error message copied into the text is
+  computed from pointers into different blocks (key + length - 1 - text),
+  capped at 26, and the copy takes one byte more (27 bytes can read past
+  the message's terminator); a stream that runs out of input before any
+  output leaves key and text null-based and png_set_text crashes.
+- png_set_pCAL stores each copy's pointer before copying into it.
+- png_read_row's "Decompression error" (0x73381c) is another string than
+  png_read_finish_row's "Decompression Error" (0x734748).
+- png_do_gamma: RGB, RGBA and grey-alpha rows of any depth but 8 take the
+  16-bit path; 2-bit grey rows also fall into the 4/8/16-bit checks.
+- CFileSource::Close and its destructor unmap the read cursor (+8), not the
+  data (+4): after reading, the view leaks. Open's mapping failures return
+  5 with the handles left open.
+- CTextException's constructor calls SetErrorMode(0).
+
+Left original: png_create_read_struct (it calls setjmp on png->jmpbuf in
+its own frame; not reproducible from C++), png_build_gamma_table,
+png_do_background, png_init_read_transformations (the x87 gamma code with
+pow), and PaintLib's DoDecode, MakeBmpFromFile, MakeBmp and raiseError
+(C++ exception handling around the decoder; the lobby banner only).

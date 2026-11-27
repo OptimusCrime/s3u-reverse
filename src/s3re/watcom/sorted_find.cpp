@@ -32,6 +32,11 @@
 //   0x005b8290  0x30  WCValOrderedVector<DirectX::CDirectDrawDevice>
 //   0x00499b30 0x120  WCValOrderedVector<GameChunkDescription>
 //   0x00468550  0x40  WCValOrderedVector<DirectX::CConnectionShortcut>
+//   0x0040a220  0x10  WCOrderedVectorBase<String> (libs-r7)
+//   0x00437c30  0xcc  WCValOrderedVector<Dirk::CPlayer> (libs-r7)
+//   0x0044dc30 0x17c  WCOrderedVectorBase<LobbyClient::CPrivateChat> (libs-r7)
+//   0x00462e60   0x2  WCValOrderedVector<unsigned short> (libs-r7)
+//   0x005de970  0x18  WCValOrderedVector<Lobby::CImageDescription> (libs-r7)
 
 #include "watcom/vector_base.h"
 
@@ -127,6 +132,26 @@ std::uint32_t __fastcall OrderedFind_468550(VectorBase* self, void*, std::uint32
                                             std::int32_t* index) {
     return FindFrom(self, element, index, 0x40);
 }
+std::uint32_t __fastcall OrderedFind_40a220(VectorBase* self, void*, std::uint32_t element, std::int32_t,
+                                            std::int32_t* index) {
+    return FindFrom(self, element, index, 0x10);
+}
+std::uint32_t __fastcall OrderedFind_437c30(VectorBase* self, void*, std::uint32_t element, std::int32_t,
+                                            std::int32_t* index) {
+    return FindFrom(self, element, index, 0xcc);
+}
+std::uint32_t __fastcall OrderedFind_44dc30(VectorBase* self, void*, std::uint32_t element, std::int32_t,
+                                            std::int32_t* index) {
+    return FindFrom(self, element, index, 0x17c);
+}
+std::uint32_t __fastcall OrderedFind_462e60(VectorBase* self, void*, std::uint32_t element, std::int32_t,
+                                            std::int32_t* index) {
+    return FindFrom(self, element, index, 0x2);
+}
+std::uint32_t __fastcall OrderedFind_5de970(VectorBase* self, void*, std::uint32_t element, std::int32_t,
+                                            std::int32_t* index) {
+    return FindFrom(self, element, index, 0x18);
+}
 
 // Purpose: Finds an element (or where it belongs) in the game settings'
 // sorted teams and the lobby's and network's sorted vectors.
@@ -180,6 +205,11 @@ S3RE_HOOK(0x005b83e0, OrderedFind_5b83e0, SortedFindFn, Original_OrderedFind_5b8
 S3RE_HOOK(0x005b8290, OrderedFind_5b8290, SortedFindFn, Original_OrderedFind_5b8290, OrderedFind_5b8290);
 S3RE_HOOK(0x00499b30, OrderedFind_499b30, SortedFindFn, Original_OrderedFind_499b30, OrderedFind_499b30);
 S3RE_HOOK(0x00468550, OrderedFind_468550, SortedFindFn, Original_OrderedFind_468550, OrderedFind_468550);
+S3RE_HOOK(0x0040a220, OrderedFind_40a220, SortedFindFn, Original_OrderedFind_40a220, OrderedFind_40a220);
+S3RE_HOOK(0x00437c30, OrderedFind_437c30, SortedFindFn, Original_OrderedFind_437c30, OrderedFind_437c30);
+S3RE_HOOK(0x0044dc30, OrderedFind_44dc30, SortedFindFn, Original_OrderedFind_44dc30, OrderedFind_44dc30);
+S3RE_HOOK(0x00462e60, OrderedFind_462e60, SortedFindFn, Original_OrderedFind_462e60, OrderedFind_462e60);
+S3RE_HOOK(0x005de970, OrderedFind_5de970, SortedFindFn, Original_OrderedFind_5de970, OrderedFind_5de970);
 
 // ---------------------------------------------------------------------------
 // Tests: a vector of 0..8 elements whose first dword is a small key (sorted,
@@ -211,6 +241,11 @@ const FindPair kFindPairs[] = {
     {Original_OrderedFind_5b8290, &OrderedFind_5b8290, 0x5b8290, 0x30},
     {Original_OrderedFind_499b30, &OrderedFind_499b30, 0x499b30, 0x120},
     {Original_OrderedFind_468550, &OrderedFind_468550, 0x468550, 0x40},
+    {Original_OrderedFind_40a220, &OrderedFind_40a220, 0x40a220, 0x10},
+    {Original_OrderedFind_437c30, &OrderedFind_437c30, 0x437c30, 0xcc},
+    {Original_OrderedFind_44dc30, &OrderedFind_44dc30, 0x44dc30, 0x17c},
+    {Original_OrderedFind_462e60, &OrderedFind_462e60, 0x462e60, 0x2},
+    {Original_OrderedFind_5de970, &OrderedFind_5de970, 0x5de970, 0x18},
 };
 
 std::vector<std::uint32_t> g_calls;

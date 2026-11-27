@@ -57,6 +57,11 @@
 //   0x005deb60  0x24  strings at +0x14          WCBareVectorBase<Lobby::CSocketAddress>
 //   0x005dff70  0x20  strings at +0x10, +0x0    WCBareVectorBase<LobbyClient::priv::CLobbyServer>
 //   0x005b7ac0  0x30  strings at +0x20, +0x10   WCValOrderedVector<DirectX::CDirectDrawDevice>
+//   0x005de9d0  0x18  strings at +0x8           WCBareVectorBase<Lobby::CImageDescription> (libs-r7)
+//   0x005df1a0  0x24  strings at +0x14          WCBareVectorBase<Lobby::CSocketAddress> (libs-r7)
+//   0x005e0170  0x20  strings at +0x10, +0x0    WCBareVectorBase<LobbyClient::priv::CLobbyServer> (libs-r7)
+//     (these three call ~string's erase(0, npos) or _Split out of line instead
+//     of inlining it; the effect is the same)
 
 #include "watcom/vector_base.h"
 
@@ -260,6 +265,15 @@ std::uint32_t __fastcall ElementVectorDestructor_5deb60(VectorBase* self, void*)
 std::uint32_t __fastcall ElementVectorDestructor_5dff70(VectorBase* self, void*) {
     return DestroyStringElementVector<0x10, 0x0>(self, vt::kWCBareVectorBase_CLobbyServer, kLobbyServerSize);
 }
+std::uint32_t __fastcall ElementVectorDestructor_5de9d0(VectorBase* self, void*) {  // (libs-r7: ~string's erase called, not inlined)
+    return DestroyStringElementVector<0x8>(self, vt::kWCBareVectorBase_CImageDescription, kImageDescriptionSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5df1a0(VectorBase* self, void*) {  // (libs-r7: ~string's erase called, not inlined)
+    return DestroyStringElementVector<0x14>(self, vt::kWCBareVectorBase_CSocketAddress, kSocketAddressSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5e0170(VectorBase* self, void*) {  // (libs-r7: ~string's erase called, not inlined)
+    return DestroyStringElementVector<0x10, 0x0>(self, vt::kWCBareVectorBase_CLobbyServer, kLobbyServerSize);
+}
 std::uint32_t __fastcall ElementVectorDestructor_5b7ac0(VectorBase* self, void*) {
     return DestroyStringElementVector<0x20, 0x10>(self, vt::kWCBareVectorBase_CDirectDrawDevice, kDirectDrawDeviceSize);
 }
@@ -346,6 +360,12 @@ S3RE_HOOK(0x005deb60, ElementVectorDestructor_5deb60, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_5deb60, ElementVectorDestructor_5deb60);
 S3RE_HOOK(0x005dff70, ElementVectorDestructor_5dff70, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_5dff70, ElementVectorDestructor_5dff70);
+S3RE_HOOK(0x005de9d0, ElementVectorDestructor_5de9d0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5de9d0, ElementVectorDestructor_5de9d0);
+S3RE_HOOK(0x005df1a0, ElementVectorDestructor_5df1a0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5df1a0, ElementVectorDestructor_5df1a0);
+S3RE_HOOK(0x005e0170, ElementVectorDestructor_5e0170, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5e0170, ElementVectorDestructor_5e0170);
 S3RE_HOOK(0x005b7ac0, ElementVectorDestructor_5b7ac0, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_5b7ac0, ElementVectorDestructor_5b7ac0);
 
@@ -503,6 +523,9 @@ const StringElementPair kStringElementPairs[] = {
     {Original_ElementVectorDestructor_5de5e0, &ElementVectorDestructor_5de5e0, 0x5de5e0, kImageDescriptionSize, {0x8}, 1},
     {Original_ElementVectorDestructor_5deb60, &ElementVectorDestructor_5deb60, 0x5deb60, kSocketAddressSize, {0x14}, 1},
     {Original_ElementVectorDestructor_5dff70, &ElementVectorDestructor_5dff70, 0x5dff70, kLobbyServerSize, {0x10, 0x0}, 2},
+    {Original_ElementVectorDestructor_5de9d0, &ElementVectorDestructor_5de9d0, 0x5de9d0, kImageDescriptionSize, {0x8}, 1},
+    {Original_ElementVectorDestructor_5df1a0, &ElementVectorDestructor_5df1a0, 0x5df1a0, kSocketAddressSize, {0x14}, 1},
+    {Original_ElementVectorDestructor_5e0170, &ElementVectorDestructor_5e0170, 0x5e0170, kLobbyServerSize, {0x10, 0x0}, 2},
     {Original_ElementVectorDestructor_5b7ac0, &ElementVectorDestructor_5b7ac0, 0x5b7ac0, kDirectDrawDeviceSize, {0x20, 0x10}, 2},
 };
 
