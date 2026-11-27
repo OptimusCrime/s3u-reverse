@@ -91,6 +91,16 @@ LOGBOOK session entry).
   the return address; the original png_chunk_warning then returns to a
   wrong address. Ours has room for 82 bytes. Only a corrupt PNG with a
   non-letter chunk name gets there (and only the lobby banner uses PNG).
+- **Stack garbage in libpng / zlib outputs (wip/png-r6):** huft_build
+  0x5b2410 copies a stack temporary into every Huffman table entry, so
+  bytes 2..3 of each entry (union padding, never read) hold the original's
+  stack contents; ours writes 0. png_handle_tIME 0x5ae970 passes a stack
+  png_time whose padding byte png_set_tIME copies to info->mod_time[7]
+  (ours: 0). png_read_finish_row 0x5afe20 leaves zstream.next_out pointing
+  at a byte of its own stack frame. Tests and specs leave these bytes out.
+- **png_do_read_interlace 0x5af7f0 (wip/png-r6):** the original copies a
+  pixel through an 8-byte stack buffer; pixel depths above 64 bits (not
+  possible from a valid IHDR) would overrun it. Ours has 32 bytes.
 
 - **WideToNarrowString 0x60b6a0 (wip/menus-r5, framework/wide_strings.cpp):**
   the result's allocator byte is an uninitialized stack byte in the
