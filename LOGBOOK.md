@@ -20,10 +20,46 @@ a batch. The user wants each round followed by the next right away.**
 **Session 57's merges and evidence are complete** (see its entry): main
 has wip/app-r4, images-r4, logic-r4, draw-r5, menus-r5 and stubs-r5.
 
-Running now (round 6, own worktrees): wip/text-r6 (Text.cpp helpers and
-the big drawers), wip/watcom-r6 (the Watcom containers), wip/png-r6 (the
-PNG libraries). Merge each when it is done, then the full suite and the
-whole-game checks once at the end of the round.
+**First thing next session: merge round 6.** Three finished branches,
+pushed, not merged (each built; worktrees still exist under
+`..\s3re-text-r6`, `..\s3re-watcom-r6`, `..\s3re-png-r6`, with junctions:
+remove the junction first, never `--force`). Merge them one at a time
+(three-way per row in re/functions.csv against the merge base; a row the
+branch left at base content takes main's), then the full emulator suite
+(`--full`; all three changed emu.py) and the whole-game checks.
+- **wip/text-r6 (9de9030), 35 verified, ~14.6 KB:** Dirk::CTextSurface
+  (Lock, Unlock, DrawText, DrawTextF, AddFont, Create, DrawWideText),
+  CDrawer panel-text helpers 0x4d65e0 / 0x4d6740 / 0x4d6a30..0x4d78d0 and
+  InitPanelFonts 0x4c6f60, RenderMessageTexts / BlitMessageTexts,
+  CLandscapeSurface::BlitVisibleArea, CDrawThread::SignalFrameDone,
+  CCriticalSection Enter/Leave, CLock, CMouseSurface SetHotspot/Clear.
+  Harness: GDI/Interlocked probes, variadic hook thunk, CRT float-table
+  preset (CRT_FLOAT_CONVERSIONS). **Merge conflict to expect:** it also
+  implemented WideToNarrowString 0x60b6a0 (game/framework/wide_to_narrow.cpp),
+  which wip/menus-r5 already put on main (wide_strings.cpp): keep one
+  (compare tests/specs), make sure 0x60b6a0 is hooked once. Its full
+  `--test` timed out at 993/993 passed (~50 tests not run): rerun after
+  the merge. Next there: the panel drawer 0x4b4d00 (71 KB) and the
+  settler drawer 0x4c85a0 (38 KB) as separate batches (their helpers are
+  done now), then SetMouseCursor 0x42cb60 (catch(...) rethrow test).
+- **wip/watcom-r6 (0057607), 241 verified, 27.7 KB:** table-driven
+  template instantiations (vector ctors/dtors/copies, element-string
+  vectors, sorted/ordered finds, base_init_upto, skip lists, list
+  ctors/dtors, comparison callbacks, 24 deleting destructors), many
+  misnamed rows renamed. Full `--test` 1051/1051 at batch 3; batch 4 only
+  filtered (47/47). 0x472eb0 stays original (folded DebugLog call).
+  Left: 129 rows, mostly misnamed game/lobby functions that inline
+  vectors (rename them), plus a few iterators and copy constructors.
+  Possibly flaky: GamePlayerSetup_Assign_MatchesOriginal (heap-address
+  dependent; backlog it if it fails again).
+- **wip/png-r6 (5511c2a), 28 verified, ~15.5 KB:** the whole zlib 1.1.3
+  decoder (full-chain original-vs-ours test with a test deflate encoder),
+  png_read_filter_row / combine_row / do_read_interlace, 13 chunk
+  handlers, png_set_text, the libpng teardown. png_read_start_row /
+  finish_row reimplemented, unverified. Full `--test` 1044/1044. Left:
+  cHRM/sRGB/zTXt/pCAL handlers, gamma, read transformations,
+  png_read_info/row/image/end, png_create_read_struct (setjmp), PaintLib
+  DoDecode/MakeBmp/CFileSource (list in re/picture_code.md).
 
 Backlog of the rest: `TODO.md` and `docs/todo/*.md`. Session 56's
 leftover list is mostly done (LoadSaveGame, InitPlayerInfo, the tiny
