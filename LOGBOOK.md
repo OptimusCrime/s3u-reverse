@@ -18,12 +18,13 @@ batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch. The user wants each round followed by the next right away.**
 
 **Round 6 is merged and has its milestone evidence** (session 58 entry):
-main has wip/watcom-r6, png-r6, text-r6 and (round 7) cursor-r7 and
-panel-r7; their worktrees and the r4/r5 ones are removed.
+main has wip/watcom-r6, png-r6, text-r6 and (round 7) cursor-r7,
+panel-r7 and settlerdraw-r7; their worktrees and the r4/r5 ones are removed.
 
 **Next batches (round 7):**
-- The panel drawer CDrawer::DrawPanel 0x4b4d00 is done (panel-r7);
-  **the settler drawer 0x4c85a0 (38 KB)** is on wip/settlerdraw-r7.
+- The panel drawer CDrawer::DrawPanel 0x4b4d00 (panel-r7) and the settler
+  drawer CDrawer::QueueSettler 0x4c85a0 (settlerdraw-r7) are done; next in
+  the frame drawer's tree: Render_sub_4b26c0 (needs 0x54cbd0).
 - **Watcom leftovers:** 129 rows, mostly misnamed game/lobby functions that
   inline vectors (rename them), plus a few iterators and copy constructors.
   0x472eb0 stays original (folded DebugLog call).
@@ -167,6 +168,13 @@ against the merge base; no row was changed on both sides except
   mismatches 852/868 blocks (bounded spec); check_save slot 1 (2,000
   ticks) identical to the original, DrawPanel 529 calls; verified 12,793
   (51.75 % of the bytes), identical in a whole-game check 11,691 (42.75 %).
+- wip/settlerdraw-r7 -> e863d96 (CDrawer::QueueSettler 0x4c85a0, was
+  Render_sub_4c85a0): draw_data_layout.h combined (panel-r7's union kept;
+  sound_level +0x5c, local_player +0x98 in the union, player_team +0x294),
+  texts.h / re/globals.csv appended; `--test` 1159/1159, emutest
+  CDrawer_QueueSettler 8000 cases 0 mismatches 547/547 blocks;
+  check_save slot 1 identical, 14,479 calls; verified 12,794 (53.46 % of
+  the bytes), identical in a whole-game check 11,692 (44.46 %).
 
 ### 2026-11-26/27 (57): merges of rounds 4-5, static-initializer stubs, milestone evidence
 
