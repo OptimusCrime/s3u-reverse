@@ -1606,3 +1606,28 @@ SPECS += [
          callees={0x0040d0e0: (0, "thiscall", "probe")},
          exempt_blocks=(0x42c7e0, 0x42c801, 0x42c807)),  # catch (CTimeout*) (see above)
 ]
+
+
+# -- wip/cursor-r7: CDrawer's constructor and destructor (drawer_lifetime.cpp)
+# The constructor: CGameDrawer's, CGraphicsData's and CSoundData's
+# constructors probed (returning this), ApplyScreenLayout probed,
+# GfxDword::Construct runs (8000 times); operator new fails for one of the
+# two data objects in some cases (ThrowOutOfMemory ends the run as a throw).
+# The unwind actions (0x633070.., not blocks of the function) run only for
+# exceptions (in-process: CDrawer_Construct_MatchesOriginal throws from the
+# stubs). The destructor: the sound / graphics data null or objects with
+# FAKE_VTABLE (slot 0 probed); ~CGameDrawer probed.
+def drawer_data_objects(rng, pool, args):
+    return [(0x5f6bc, rng.choice([0, WORLD_BASE + SCRATCH]), 4), (0x5f6b8, rng.choice([0, WORLD_BASE + SCRATCH + 0x10]), 4),
+            (SCRATCH, FAKE_VTABLE, 4), (SCRATCH + 0x10, FAKE_VTABLE, 4)]
+
+
+SPECS += [
+    Spec("CDrawer_Construct", 0x0042c820, "thiscall", [anything, anything, anything], max_cases=300,
+         new_fails=0.4, new_fails_size=(0xc44, 0x14c),
+         callees={0x005b6c80: (1, "thiscall", "this"), 0x005f67c0: (0, "thiscall", "this"),
+                  0x005fdb60: (0, "thiscall", "this"), 0x004c6d40: (0, "thiscall", "probe"),
+                  0x00610960: (1, "thiscall", "throw")}),
+    Spec("CDrawer_Destroy", 0x0042ca00, "thiscall", [], presets=drawer_data_objects, virtuals={0x0: 1},
+         callees={0x005b6d70: (0, "thiscall", "probe")}),
+]

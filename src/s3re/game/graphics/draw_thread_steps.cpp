@@ -4,7 +4,8 @@
 // CDrawer.
 //
 // Layout (the full object): the CGameDrawThread part (0x54 bytes; +0x44
-// the drawer), then +0x54 the drawer's constructor argument, +0x58 the
+// the drawer), then +0x54 the CDirectDraw the drawer is built on (passed to
+// CGameDrawer's constructor), +0x58 the
 // shared draw-data slot (exchanged with InterlockedExchange), +0x5c the
 // thread's own draw data, +0x60 the waitable the logic thread signals
 // (slot 0: Wait(timeout, flag)), +0x64 the "frame taken" event, +0x68 no
@@ -47,6 +48,7 @@
 
 #include "game/debug_log.h"
 #include "game/globals.h"
+#include "game/graphics/drawer_layout.h"
 #include "game/texts.h"
 #include "game/vtables.h"
 #include "hooks.h"
@@ -79,7 +81,7 @@ constexpr std::uintptr_t kWaitTime = 0x0040d0e0;                 // App::WaitTim
 
 constexpr std::uint32_t kDrawThreadVtable = vtables::kCDrawThread;
 constexpr std::uint32_t kDrawThreadHandleVtable = vtables::kCDrawThread_sub4;
-constexpr std::uint32_t kDrawerSize = 0x5f700;  // raw-ok: sizeof the whole CDrawer (layout.h's CDrawer is partial)
+constexpr std::uint32_t kDrawerSize = sizeof(CDrawer);  // 0x5f700
 constexpr std::uint32_t kDrawDataWaitKind = 3;      // App::WaitTime's kind for the draw data
 constexpr std::uint32_t kNoDrawerSleep = 60;        // ms per step without a drawer
 constexpr std::uint32_t kFetchContinuation = 0x42c7cf;  // EAX after FetchDrawData's catch
@@ -96,7 +98,7 @@ struct DrawThread {
     std::uint8_t unk2a[0x44 - 0x2a];
     void* drawer;                     // +0x44 the CDrawer
     std::uint8_t unk48[0x54 - 0x48];
-    std::uint32_t drawer_arg;         // +0x54 passed to CDrawer's constructor
+    std::uint32_t drawer_arg;         // +0x54 a CDirectDraw for the drawer (CDrawer::CDrawer passes it to CGameDrawer)
     volatile std::int32_t* shared_slot;  // +0x58 where the logic thread puts the next draw data
     void* draw_data;                  // +0x5c the draw data being drawn
     void* producer;                   // +0x60 signalled when new draw data is there

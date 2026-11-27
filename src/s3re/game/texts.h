@@ -718,4 +718,8 @@ inline constexpr GameText kDDUnlock{0x697e7c};             // "CSurface::DDUnloc
 inline constexpr GameText kDrawerNotNull{0x79dfb0};        // "lpDrawer"
 inline constexpr GameText kGamebaseFile{0x79df18};         // "E:\Siedler3\DirectX\Gamebase.cpp"
 inline constexpr GameText kDrawNoData{0x698e7c};           // "DRAW: Kein Daten %i %i" (CDrawThread::Draw, FetchDrawData)
+// CDrawer::CDrawer's out-of-memory checks (Dirk\Draw.cpp lines 204 / 207).
+inline constexpr GameText kDrawFile{0x698f1c};             // "E:\Siedler3\Dirk\Draw.cpp"
+inline constexpr GameText kGraphicsDataNotNull{0x698f0c};  // "lpGraphicsData"
+inline constexpr GameText kSoundDataNotNull{0x698f00};     // "lpSoundData"
 }  // namespace s3re::game::texts

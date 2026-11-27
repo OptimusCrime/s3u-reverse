@@ -2006,3 +2006,51 @@ SPECS += [
          exempt_blocks=(0x5b66ee, 0x5b66f5, 0x5b66fb)),  # catch (CAppNotActiveException*) (see above)
     Spec("DirectX_CGameDrawThread_OnActivate", 0x005b6710, "thiscall", [anything], eax_mask=0xFF),
 ]
+
+
+# -- wip/cursor-r7: CDirectDrawDevice::IsEqual, CGameDrawer's constructor
+# and Shutdown (directx_drawer_lifetime.cpp)
+# IsEqual: the GUID at world 0 against one in the scratch area (equal, one
+# byte apart, or random). The constructor's member constructors are
+# probed. Shutdown: the drawer's slot 2 (0x08) probed; the palette list +0x28
+# with vtable FAKE_VTABLE + 0x100 (its slot 1 probed as 0x104); get(0) is
+# probed and hands out the links at GDL_LINKS (or none), emptying the list
+# (+0x30 = 0) at random; the links' palettes null or objects with vtable
+# FAKE_VTABLE + 0x200 (slot 0 probed as 0x200).
+GDL_LINKS = SCRATCH
+GDL_PALETTES = SCRATCH + 0x100
+
+
+def gdl_guids(rng, pool, args):
+    guid = rng.getrandbits(128)
+    other = rng.choice([guid, guid ^ (rng.randrange(1, 256) << (8 * rng.randrange(16))), rng.getrandbits(128)])
+    return [(0, guid & (2**64 - 1), 8), (8, guid >> 64, 8), (SCRATCH, other & (2**64 - 1), 8), (SCRATCH + 8, other >> 64, 8)]
+
+
+def gdl_shutdown(rng, pool, args):
+    fields = [(0, FAKE_VTABLE, 4), (0x28, FAKE_VTABLE + 0x100, 4),
+              (0x30, rng.choice([0, WORLD_BASE + GDL_LINKS]), 4)]
+    for i in range(4):
+        fields.append((GDL_LINKS + 8 * i + 4, rng.choice([0, WORLD_BASE + GDL_PALETTES + 4 * i]), 4))
+        fields.append((GDL_PALETTES + 4 * i, FAKE_VTABLE + 0x200, 4))
+    return fields
+
+
+def gdl_get_effect(machine, ecx, args, h):
+    if h % 3 == 0:
+        machine.guest_write(WORLD_BASE + 0x30, struct.pack("<I", 0))
+    return 0 if (h >> 8) % 8 == 0 else WORLD_BASE + GDL_LINKS + 8 * ((h >> 16) % 4)
+
+
+SPECS += [
+    Spec("DirectX_CDirectDrawDevice_IsEqual", 0x005b69c0, "thiscall", [one_of(WORLD_BASE + SCRATCH)],
+         presets=gdl_guids),
+    Spec("DirectX_CGameDrawer_Construct", 0x005b6c80, "thiscall", [anything],
+         callees={0x005bead0: (1, "thiscall", "this"), 0x005b7d40: (2, "thiscall", "probe"),
+                  0x005b7e00: (2, "thiscall", "probe"), 0x005b7ec0: (2, "thiscall", "probe"),
+                  0x005b7f40: (2, "thiscall", "probe")}),
+    Spec("DirectX_CGameDrawer_Shutdown", 0x005b6f00, "thiscall", [], presets=gdl_shutdown,
+         virtuals={0x08: 0, 0x104: 1, 0x200: 1},
+         callees={0x0060b500: (1, "thiscall", "probe", gdl_get_effect), 0x0060b560: (0, "thiscall", "probe"),
+                  0x005b8080: (1, "thiscall", "probe")}),
+]
