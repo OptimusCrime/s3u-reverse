@@ -22,6 +22,25 @@
 //   WCValSkipListDict (0x00457c10): (a, b) ret 8: WCSkipNonTempBase(a, b,
 //   0), the base vtable 0x65721c, a WCValOrderedVector<String>(10, 5) at
 //   +0x7c (inline), the dictionary's vtable 0x6571e4. EAX = this.
+// WCBareVectorBase<void*>::base_copy (0x004732f0, was Net_sub_4732f0):
+//   (const vector& from) ret 4: +4, filled and capacity from `from`, a new
+//   block of capacity * 4 bytes if the capacity is positive (signed; none:
+//   data 0; operator new failing: filled = capacity = 0, the error hook),
+//   the `filled` pointers copied (filled and both blocks re-read, each
+//   destination null-checked). Grow, length and the vtable are left to the
+//   callers. EAX is not used by them.
+// WCValSkipListDict<unsigned int, Lobby::CLMMessageBlock>'s copy constructor
+//   (0x00609a20): (const dict& from) ret 4: WCSkipNonTempBase(from's +0x68,
+//   +0x64, 0), vtable 0x65d588, the default value CLMMessageBlock(0, 0) at
+//   +0x7c (0x601370), vtable 0x65d56c, base_assign(from) (0x60ba60).
+// WCValSkipListDictIter<unsigned long, WCPtrSortedVector<CExecuteType>>::
+//   value (0x00472ef0): (result) ret 4, a copy returned by value: on an
+//   entry (node at +0xc), WCVectorBase<void*>(0, 0) at the result, vtable
+//   0x657670, base_copy (0x4732f0) from the entry's vector (node - 0x1c),
+//   its grow, and its length if there is a block (else 0); off an entry
+//   (the library's error hook first) the same from a temporary empty
+//   vector (10, 5), the result made by WCSortedVectorBase<void*>(0, 0)
+//   instead, the temporary destroyed afterwards. EAX = result.
 
 #include "watcom/vector_base.h"
 
@@ -44,12 +63,17 @@ namespace vt = game::vtables;
 
 using NewNodeFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx, std::uint32_t pair, std::int32_t level);
 using DictConstructFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx, std::uint32_t a, std::uint32_t b);
+using OneArgFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx, std::uint32_t arg);
+using BaseCopyFn = void(__fastcall*)(VectorBase* self, void* edx, const VectorBase* from);
 
 std::uint32_t __fastcall SkipNewNode_472e60(std::uint32_t self, void* edx, std::uint32_t pair, std::int32_t level);
 std::uint32_t __fastcall SkipNewNode_472c70(std::uint32_t self, void* edx, std::uint32_t pair, std::int32_t level);
 std::uint32_t __fastcall SkipNewNode_60a6d0(std::uint32_t self, void* edx, std::uint32_t pair, std::int32_t level);
 std::uint32_t __fastcall SkipNewNode_459030(std::uint32_t self, void* edx, std::uint32_t pair, std::int32_t level);
 std::uint32_t __fastcall SkipDictConstructor_457c10(std::uint32_t self, void* edx, std::uint32_t a, std::uint32_t b);
+std::uint32_t __fastcall SkipDictCopy_609a20(std::uint32_t self, void* edx, std::uint32_t from);
+void __fastcall VectorBaseCopy_4732f0(VectorBase* self, void* edx, const VectorBase* from);
+std::uint32_t __fastcall SkipIterValue_472ef0(std::uint32_t self, void* edx, std::uint32_t result);
 
 S3RE_HOOK(0x00472e60, SkipNewNode_472e60, NewNodeFn, Original_SkipNewNode_472e60, SkipNewNode_472e60);
 S3RE_HOOK(0x00472c70, SkipNewNode_472c70, NewNodeFn, Original_SkipNewNode_472c70, SkipNewNode_472c70);
@@ -57,6 +81,9 @@ S3RE_HOOK(0x0060a6d0, SkipNewNode_60a6d0, NewNodeFn, Original_SkipNewNode_60a6d0
 S3RE_HOOK(0x00459030, SkipNewNode_459030, NewNodeFn, Original_SkipNewNode_459030, SkipNewNode_459030);
 S3RE_HOOK(0x00457c10, SkipDictConstructor_457c10, DictConstructFn, Original_SkipDictConstructor_457c10,
           SkipDictConstructor_457c10);
+S3RE_HOOK(0x004732f0, VectorBaseCopy_4732f0, BaseCopyFn, Original_VectorBaseCopy_4732f0, VectorBaseCopy_4732f0);
+S3RE_HOOK(0x00609a20, SkipDictCopy_609a20, OneArgFn, Original_SkipDictCopy_609a20, SkipDictCopy_609a20);
+S3RE_HOOK(0x00472ef0, SkipIterValue_472ef0, OneArgFn, Original_SkipIterValue_472ef0, SkipIterValue_472ef0);
 
 namespace {
 
@@ -68,6 +95,24 @@ constexpr std::uint32_t kStringSize = 0x10;
 constexpr std::uint32_t kDictVector = 0x7c;  // the value vector of 0x457c10's dictionary
 constexpr std::uint32_t kDictVectorCapacity = 10;
 constexpr std::uint32_t kDictVectorGrow = 5;
+constexpr std::uintptr_t kMessageBlockConstruct = 0x00601370;  // Lobby::CLMMessageBlock(int, int)
+constexpr std::uintptr_t kSkipBaseAssign = 0x0060ba60;        // WCSkipNonTempBase::base_assign (original)
+constexpr std::uint32_t kSkipProbability = 0x68;  // the base constructor's arguments, as kept by base_init
+constexpr std::uint32_t kSkipLevels = 0x64;
+constexpr std::uint32_t kDictValue = 0x7c;  // the dictionary's default value (a CLMMessageBlock)
+constexpr std::uintptr_t kVoidVectorConstruct = 0x00468330;        // WCVectorBase<void*>(capacity, grow) (ours)
+constexpr std::uintptr_t kSortedVoidVectorConstruct = 0x00462c70;  // WCSortedVectorBase<void*>(capacity, grow) (ours)
+constexpr std::uintptr_t kVoidVectorDestroy = 0x00462eb0;          // ~WCBareVectorBase<void*> (ours)
+constexpr std::uintptr_t kPtrVectorAssign = 0x004732f0;            // base_copy (ours, above)
+constexpr std::uint32_t kIterCurrent = 0x0c;     // the iterator's current node (its forward pointers)
+constexpr std::uint32_t kRequestPairValue = 0x1c;  // node - 0x1c: the pair's vector (the key 4 bytes before it)
+constexpr std::uint32_t kDefaultCapacity = 10;
+constexpr std::uint32_t kDefaultGrow = 5;
+
+using TwoArgFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx, std::uint32_t a, std::uint32_t b);
+using VectorConstructFn = VectorBase*(__fastcall*)(VectorBase* self, void* edx, std::uint32_t capacity,
+                                                   std::uint32_t grow);
+using VectorDestroyFn = std::uint32_t(__fastcall*)(VectorBase* self, void* edx);
 
 using AllocatorFn = std::uint32_t(__fastcall*)(std::uint32_t size, void* edx);
 using ThisArgFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx, std::uint32_t arg);
@@ -165,6 +210,73 @@ std::uint32_t __fastcall SkipDictConstructor_457c10(std::uint32_t self, void*, s
                     kStringSize, vt::kWCBareVectorBase_String, vt::kWCValOrderedVector_String);
     Dword(self) = vt::kWCValSkipListDict_UIntStringVector;
     return self;
+}
+
+// Purpose: Copies the elements of a vector of pointers into another (the
+// assignment used by the request tables' iterators, the game settings' and
+// the DirectPlay player lists).
+void __fastcall VectorBaseCopy_4732f0(VectorBase* self, void*, const VectorBase* from) {
+    self->unk04 = from->unk04;
+    self->filled = from->filled;
+    self->capacity = from->capacity;
+    if (static_cast<std::int32_t>(self->capacity) <= 0) {
+        self->data = 0;
+        return;
+    }
+    self->data = reinterpret_cast<std::uintptr_t>(msvc6::GameOperatorNew(self->capacity * 4));
+    if (self->data == 0) {
+        self->filled = 0;
+        self->capacity = 0;  // (then the library's empty error hook 0x59f200)
+        return;
+    }
+    for (std::int32_t i = 0; i < self->filled; ++i) {  // (filled and both blocks re-read per element)
+        const std::uint32_t to = self->data + static_cast<std::uint32_t>(i) * 4;
+        if (to != 0) {
+            Dword(to) = Dword(from->data + static_cast<std::uint32_t>(i) * 4);
+        }
+    }
+}
+
+// Purpose: Copy constructor of the lobby protocol's message-block
+// dictionary (its parameters, an empty default block, then every entry).
+std::uint32_t __fastcall SkipDictCopy_609a20(std::uint32_t self, void*, std::uint32_t from) {
+    reinterpret_cast<BaseConstructFn>(kSkipBaseConstruct)(self, nullptr, Dword(from + kSkipProbability),
+                                                          Dword(from + kSkipLevels), 0);
+    Dword(self) = vt::kWCSkipListBase_UIntMessageBlock;
+    reinterpret_cast<TwoArgFn>(kMessageBlockConstruct)(self + kDictValue, nullptr, 0, 0);
+    Dword(self) = vt::kWCValSkipListDict_UIntMessageBlock;
+    reinterpret_cast<ThisArgFn>(kSkipBaseAssign)(self, nullptr, from);
+    return self;
+}
+
+// Purpose: The value at the network request table iterator's position, a
+// copy of its vector of requests (an empty vector when the iterator is not
+// on an entry).
+std::uint32_t __fastcall SkipIterValue_472ef0(std::uint32_t self, void*, std::uint32_t result) {
+    const std::uint32_t node = Dword(self + kIterCurrent);
+    auto* const out = reinterpret_cast<VectorBase*>(result);
+    if (node == 0) {
+        // (The library's error hook 0x59f200 here.) A default value: an empty
+        // WCVectorBase<void*>(10, 5), copied.
+        VectorBase empty;
+        reinterpret_cast<VectorConstructFn>(kVoidVectorConstruct)(&empty, nullptr, kDefaultCapacity, kDefaultGrow);
+        empty.vtable = vt::kWCPtrSortedVector_CExecuteType;
+        reinterpret_cast<VectorConstructFn>(kSortedVoidVectorConstruct)(out, nullptr, 0, 0);
+        out->vtable = vt::kWCPtrSortedVector_CExecuteType;
+        reinterpret_cast<ThisArgFn>(kPtrVectorAssign)(result, nullptr, reinterpret_cast<std::uint32_t>(&empty));
+        out->grow = empty.grow;
+        out->length = out->data != 0 ? empty.length : 0;
+        empty.vtable = vt::kWCVectorBase_voidp;
+        reinterpret_cast<VectorDestroyFn>(kVoidVectorDestroy)(&empty, nullptr);
+        return result;
+    }
+    const auto* const value = reinterpret_cast<const VectorBase*>(node - kRequestPairValue);
+    reinterpret_cast<VectorConstructFn>(kVoidVectorConstruct)(out, nullptr, 0, 0);
+    out->vtable = vt::kWCPtrSortedVector_CExecuteType;
+    reinterpret_cast<ThisArgFn>(kPtrVectorAssign)(result, nullptr, reinterpret_cast<std::uint32_t>(value));
+    out->grow = value->grow;
+    out->length = out->data != 0 ? value->length : 0;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +487,133 @@ std::uint32_t __fastcall WrongDictConstructor(std::uint32_t self, void* edx, std
     return self;
 }
 
+// The message-block dictionary's copy constructor: its callees stubbed
+// (the base constructor returns `this`), the source fixed.
+bool CompareDictCopy(test::Context& ctx, OneArgFn ours, int cases) {
+    constexpr std::size_t kDict = 0xa4;
+    std::uint8_t from[kDict];
+    for (int i = 0; i < cases; ++i) {
+        std::uint8_t initial[kDict];
+        ctx.rng().Fill(initial, sizeof(initial));
+        ctx.rng().Fill(from, sizeof(from));
+        auto run = [&](OneArgFn fn, std::uint8_t* object, std::vector<test::StubCall>& calls) {
+            std::memcpy(object, initial, kDict);
+            test::CalleeStubs stubs;
+            const auto self = [](game::CGameData*, std::uint32_t self, const std::uint32_t*) { return self; };
+            stubs.Install<3, kSkipBaseConstruct>(self);
+            stubs.Install<2, kMessageBlockConstruct>(self);
+            stubs.Install<1, kSkipBaseAssign>(self);
+            stubs.SetWorld(reinterpret_cast<game::CGameData*>(object));
+            const std::uint32_t eax = fn(reinterpret_cast<std::uint32_t>(object), nullptr,
+                                         reinterpret_cast<std::uint32_t>(from)) -
+                                      reinterpret_cast<std::uint32_t>(object);
+            calls = stubs.Take();
+            return eax;
+        };
+        std::uint8_t oa[kDict], ob[kDict];
+        std::vector<test::StubCall> ca, cb;
+        const std::uint32_t ea = run(Original_SkipDictCopy_609a20, oa, ca);
+        const std::uint32_t eb = run(ours, ob, cb);
+        if (!S3RE_EXPECT_EQ(ea, eb) || !S3RE_EXPECT_MEM_EQ(oa, ob, kDict) || !S3RE_EXPECT(ca == cb)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Wrong: the base constructor gets the probability twice.
+std::uint32_t __fastcall WrongDictCopy(std::uint32_t self, void* edx, std::uint32_t from) {
+    Dword(from + kSkipLevels) = Dword(from + kSkipProbability);
+    return SkipDictCopy_609a20(self, edx, from);
+}
+
+// A source vector of 0..8 pointers (capacity -1..9, filled <= capacity,
+// sometimes no block) for base_copy and the iterator's value().
+struct CopySource {
+    std::uint8_t pair[0x20];  // key, then the vector
+    std::uint32_t block[9];
+};
+CopySource g_source;
+
+VectorBase* MakeSource(test::Rng& rng) {
+    rng.Fill(&g_source, sizeof(g_source));
+    auto* v = reinterpret_cast<VectorBase*>(g_source.pair + 4);
+    const std::int32_t capacity = rng.Chance(1, 8) ? rng.Range(-1, 0) : rng.Range(1, 9);
+    v->capacity = static_cast<std::uint32_t>(capacity);
+    v->filled = capacity > 0 ? rng.Range(-1, capacity) : rng.Range(-1, 2);
+    v->data = rng.Chance(1, 10) && capacity <= 0 ? 0 : reinterpret_cast<std::uint32_t>(g_source.block);
+    return v;
+}
+
+// The result vector's bytes with its block replaced by its contents.
+std::vector<std::uint32_t> Flatten(VectorBase& v) {
+    std::vector<std::uint32_t> out(reinterpret_cast<const std::uint32_t*>(&v),
+                                   reinterpret_cast<const std::uint32_t*>(&v) + sizeof(VectorBase) / 4);
+    out[2] = v.data != 0 ? 1 : 0;
+    if (v.data != 0) {
+        for (std::int32_t k = 0; k < v.filled && k < 9; ++k) {
+            out.push_back(Dword(v.data + 4u * static_cast<std::uint32_t>(k)));
+        }
+        msvc6::GameOperatorDelete(reinterpret_cast<void*>(v.data));
+    }
+    return out;
+}
+
+bool CompareBaseCopy(test::Context& ctx, BaseCopyFn ours, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        VectorBase initial;
+        ctx.rng().Fill(&initial, sizeof(initial));
+        const VectorBase* from = MakeSource(ctx.rng());
+        VectorBase a = initial, b = initial;
+        Original_VectorBaseCopy_4732f0(&a, nullptr, from);
+        ours(&b, nullptr, from);
+        if (!S3RE_EXPECT(Flatten(a) == Flatten(b))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: capacity %d, filled %d", i, from->capacity, from->filled);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool CompareIterValue(test::Context& ctx, OneArgFn ours, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        std::uint8_t iterator[0x20];
+        ctx.rng().Fill(iterator, sizeof(iterator));
+        MakeSource(ctx.rng());
+        Dword(reinterpret_cast<std::uint32_t>(iterator) + kIterCurrent) =
+            ctx.rng().Chance(1, 4) ? 0 : reinterpret_cast<std::uint32_t>(g_source.pair) + 0x20;
+        VectorBase initial;
+        ctx.rng().Fill(&initial, sizeof(initial));
+        VectorBase a = initial, b = initial;
+        const std::uint32_t ea = Original_SkipIterValue_472ef0(reinterpret_cast<std::uint32_t>(iterator), nullptr,
+                                                               reinterpret_cast<std::uint32_t>(&a));
+        const std::uint32_t eb = ours(reinterpret_cast<std::uint32_t>(iterator), nullptr,
+                                      reinterpret_cast<std::uint32_t>(&b));
+        if (!S3RE_EXPECT(ea == reinterpret_cast<std::uint32_t>(&a) && eb == reinterpret_cast<std::uint32_t>(&b)) ||
+            !S3RE_EXPECT(Flatten(a) == Flatten(b))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Wrong: base_copy copies one element less.
+void __fastcall WrongBaseCopy(VectorBase* self, void* edx, const VectorBase* from) {
+    VectorBaseCopy_4732f0(self, edx, from);
+    if (self->data != 0 && self->filled > 0) {
+        Dword(self->data + 4u * static_cast<std::uint32_t>(self->filled - 1)) = 0;
+    }
+}
+
+// Wrong: value() leaves the length at 0.
+std::uint32_t __fastcall WrongIterValue(std::uint32_t self, void* edx, std::uint32_t result) {
+    SkipIterValue_472ef0(self, edx, result);
+    reinterpret_cast<VectorBase*>(result)->length = 0;
+    return result;
+}
+
 }  // namespace
 
 S3RE_TEST(WatcomSkipNewNodes2_MatchOriginal) {
@@ -384,6 +623,9 @@ S3RE_TEST(WatcomSkipNewNodes2_MatchOriginal) {
         }
     }
     CompareDictConstructor(ctx, &SkipDictConstructor_457c10, 300);
+    CompareDictCopy(ctx, &SkipDictCopy_609a20, 300);
+    CompareBaseCopy(ctx, &VectorBaseCopy_4732f0, 2000);
+    CompareIterValue(ctx, &SkipIterValue_472ef0, 2000);
 }
 
 S3RE_TEST(WatcomSkipNewNodes2_ComparisonDetectsWrongImplementation) {
@@ -393,6 +635,15 @@ S3RE_TEST(WatcomSkipNewNodes2_ComparisonDetectsWrongImplementation) {
     test::Context probe2(ctx.name(), 1, /*quiet=*/true);
     CompareDictConstructor(probe2, &WrongDictConstructor, 300);
     S3RE_EXPECT(probe2.failures() > 0);
+    test::Context probe3(ctx.name(), 1, /*quiet=*/true);
+    CompareDictCopy(probe3, &WrongDictCopy, 300);
+    S3RE_EXPECT(probe3.failures() > 0);
+    test::Context probe4(ctx.name(), 1, /*quiet=*/true);
+    CompareBaseCopy(probe4, &WrongBaseCopy, 2000);
+    S3RE_EXPECT(probe4.failures() > 0);
+    test::Context probe5(ctx.name(), 1, /*quiet=*/true);
+    CompareIterValue(probe5, &WrongIterValue, 2000);
+    S3RE_EXPECT(probe5.failures() > 0);
 }
 
 }  // namespace s3re::watcom

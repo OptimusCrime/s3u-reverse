@@ -782,3 +782,40 @@ SPECS += [Spec("SkipNewNode_459030", 0x00459030, "thiscall", NODES2_ARGS, preset
                virtuals=ISV_VIRTUALS, new_fails=0.2, globals=name_null_string_count)]
 SPECS += [Spec("SkipDictConstructor_457c10", 0x00457c10, "thiscall", [anything, anything], callees=SKIP_BASE_CALLEES,
                new_fails=0.2)]
+
+
+# -- base_copy 0x4732f0, the request-table iterator value() 0x472ef0 and the
+# message-block dictionary copy 0x609a20 (skiplist_nodes2.cpp, libs-r7) ----
+# The source vector in scratch slot 1 (+4 after a key), its block of up to 9
+# pointers in slot 2 (capacity -1..9, filled <= capacity, sometimes no
+# block); value() runs on an iterator at world 0 whose +0xc is null or the
+# source's node, into a result in slot 3; its callees (ours) run.
+COPY_PAIR = SCRATCH + SCRATCH_SLOT_BYTES
+COPY_BLOCK = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+
+
+def copy_source(rng):
+    capacity = rng.choice([0, 0xFFFFFFFF, rng.randint(1, 9), rng.randint(1, 9), rng.randint(1, 9)])
+    filled = rng.randint(-1, capacity) if capacity <= 9 else rng.randint(-1, 2)
+    data = 0 if capacity > 9 or capacity == 0 and rng.random() < 0.5 else WORLD_BASE + COPY_BLOCK
+    return [(COPY_PAIR + 4 + 0x0c, capacity, 4), (COPY_PAIR + 4 + 0x10, filled & 0xFFFFFFFF, 4),
+            (COPY_PAIR + 4 + 0x08, data, 4)]
+
+
+def copy_presets(rng, pool, args):
+    return copy_source(rng)
+
+
+def iter_value_presets(rng, pool, args):
+    return copy_source(rng) + [(0x0c, rng.choice([0, WORLD_BASE + COPY_PAIR + 0x20, WORLD_BASE + COPY_PAIR + 0x20]), 4)]
+
+
+SPECS += [
+    Spec("VectorBaseCopy_4732f0", 0x004732f0, "thiscall", [one_of(WORLD_BASE + COPY_PAIR + 4)], presets=copy_presets,
+         eax_mask=0, new_fails=0.2),
+    Spec("SkipIterValue_472ef0", 0x00472ef0, "thiscall", [one_of(WORLD_BASE + SCRATCH + 3 * SCRATCH_SLOT_BYTES)],
+         presets=iter_value_presets, new_fails=0.2),
+    Spec("SkipDictCopy_609a20", 0x00609a20, "thiscall", [one_of(WORLD_BASE + COPY_PAIR)],
+         callees={0x0060b9f0: (3, "thiscall", "this"), 0x00601370: (2, "thiscall", "this"),
+                  0x0060ba60: (1, "thiscall", "probe")}),
+]
