@@ -116,9 +116,13 @@ identical to the original in a whole-game check, blue = verified by tests
 only, yellow = understood but not reimplemented yet, red = not understood
 yet. Under it, the treemap shows every function in `S3.EXE` as a box,
 sized by its code size, in the same colours. `docs/progress.html` is the interactive
-version (hover details, click to zoom, totals, history): open it in a
-browser, or publish it together with `docs/progress-data.js`, the data file
-it reads. Regenerate the data and the picture with `python tools/progress.py`.
+version (hover details, click to zoom, totals, history), published at
+<https://optimuscrime.github.io/s3u-reverse/>; locally, open it in a
+browser (it reads `docs/progress-data.js`). Regenerate the data and the
+picture with `python tools/progress.py`. Deployment: every push to `main`
+that changes the page, its data or the picture runs
+`.github/workflows/pages.yml`, which publishes the committed files as they
+are (CI doesn't regenerate them).
 
 ![Reimplementation progress](docs/progress.svg)
 

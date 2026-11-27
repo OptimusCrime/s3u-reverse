@@ -1,0 +1,50 @@
+# Publishes the progress page (docs/progress.html) to GitHub Pages.
+# The data is generated locally by tools/progress.py and committed; CI only
+# copies the committed files (the game isn't available here).
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/progress.html
+      - docs/progress-data.js
+      - docs/progress.svg
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Assemble the site
+        run: |
+          mkdir _site
+          cp docs/progress.html _site/index.html
+          cp docs/progress-data.js docs/progress.svg _site/
+          # No Jekyll build runs for Actions deployments; the marker is only a
+          # safeguard (upload-pages-artifact v4 may leave dotfiles out).
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
