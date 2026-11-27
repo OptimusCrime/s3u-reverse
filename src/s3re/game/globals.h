@@ -197,6 +197,14 @@ inline constexpr GameGlobal<std::uint32_t> g_logicStartState{0x7dfd44};
 inline constexpr GameGlobal<std::int32_t> g_revealMap{0x7dfd84};
 // Number of the running campaign mission, 0 outside campaigns.
 inline constexpr GameGlobal<std::int32_t> g_campaignMission{0x7dfdb0};
+// Non-zero: the build menu shows each building's costs (CDrawer::DrawPanel
+// 0x4b4d00); set elsewhere, not traced.
+inline constexpr GameGlobal<std::uint8_t> g_showBuildCosts{0x7deb49};
+// The goods shown in the four input slots of the side panel's building
+// menu and their columns (cells); written by CDrawer::DrawPanel 0x4b4d00,
+// probably read by the panel's click handling.
+inline constexpr GameGlobal<std::int32_t[4]> g_panelInputGoods{0x7dfd88};
+inline constexpr GameGlobal<std::int32_t[4]> g_panelInputColumns{0x7dfd98};
 // Non-zero: CLogicThread::Step skips the world updates; ExecuteCommands
 // (0xf4 SyncCheck) counts it up after a checksum mismatch, so a desync
 // stops the simulation.

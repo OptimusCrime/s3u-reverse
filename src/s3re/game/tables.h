@@ -386,4 +386,30 @@ inline constexpr GameGlobal<const std::int32_t> g_musicTracksGold1{0x730b30};   
 inline constexpr GameGlobal<const std::int32_t> g_musicTracksGold2{0x730b60};     // [4][3]
 inline constexpr GameGlobal<const std::int32_t> g_musicListLengths{0x730b90};     // [4][4]: ORG, AMZ, Gold 1, Gold 2
 
+// The side panel (CDrawer::DrawPanel 0x4b4d00, panel_drawer*.cpp).
+// The GUI images of the 6 x 6 goods grid (statistics and trade pages), by
+// grid slot - 1; -1 = an empty slot. The panel also reads the dword before
+// it for slot 0 (0x6a5714, the last entry of another table).
+inline constexpr GameGlobal<const std::uint32_t[36]> g_goodsGridImages{0x6a5718};
+// The grid slot (1..36) of each good, by good - 1 (the original reads
+// 0x658a93 + good, signed bytes).
+inline constexpr GameGlobal<const std::int8_t[]> g_goodsGridSlot{0x658a94};
+// A GUI image per good number (0 for none, -1 for no picture).
+inline constexpr GameGlobal<const std::uint32_t[]> g_goodImages{0x6a331c};
+// The positions {column, row} (cells, read as 16 bits) of 30 goods on the
+// statistics page of the goods' distribution (menu 2, page 4).
+inline constexpr GameGlobal<const std::int32_t[30][2]> g_goodsMapPositions{0x6a33b4};
+// Per race nine more GUI images of goods (the building menu's inputs):
+// [race][0..8] for the goods 5, 8, 15, 32, 30, 31, 35, 33, 34.
+inline constexpr GameGlobal<const std::uint32_t[4][9]> g_raceGoodImages{0x6a34a4};
+// Per kind and race a GUI image of settlers and soldiers (12 kinds).
+inline constexpr GameGlobal<const std::uint32_t[12][4]> g_raceSettlerImages{0x6a3534};
+// Per race the animation of the soldiers' ranks (menu 5).
+inline constexpr GameGlobal<const std::uint32_t[4]> g_raceRankAnimations{0x6a5448};
+// The text id of each building type's name.
+inline constexpr GameGlobal<const std::uint32_t[]> g_buildingNameTexts{0x6a00a8};
+// Per building type up to four goods its panel shows (0 = none; probably
+// the goods it takes in).
+inline constexpr GameGlobal<const std::int32_t[][4]> g_buildingPanelGoods{0x6a018c};
+
 }  // namespace s3re::game

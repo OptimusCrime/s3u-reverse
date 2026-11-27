@@ -286,6 +286,7 @@ add_library(s3re SHARED
     game/ui/ui_updown.cpp
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
+    game/graphics/building_slots.cpp
     game/graphics/draw_thread.cpp
     game/graphics/drawer_display_mode.cpp
     game/graphics/drawer_lifetime.cpp
@@ -304,6 +305,13 @@ add_library(s3re SHARED
     game/graphics/gfx_rle.cpp
     game/graphics/gfx_spans.cpp
     game/graphics/graphics_helpers.cpp
+    game/graphics/panel_build_menu.cpp
+    game/graphics/panel_building_info.cpp
+    game/graphics/panel_drawer.cpp
+    game/graphics/panel_drawer_tests.cpp
+    game/graphics/panel_settlers.cpp
+    game/graphics/panel_soldiers.cpp
+    game/graphics/panel_statistics.cpp
     game/graphics/text_panels.cpp
     game/graphics/text_panels_tests.cpp
     game/graphics/text_surface.cpp

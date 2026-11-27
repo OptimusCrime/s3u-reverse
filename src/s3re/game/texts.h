@@ -745,4 +745,8 @@ inline constexpr GameText kDrawNoData{0x698e7c};           // "DRAW: Kein Daten 
 inline constexpr GameText kDrawFile{0x698f1c};             // "E:\Siedler3\Dirk\Draw.cpp"
 inline constexpr GameText kGraphicsDataNotNull{0x698f0c};  // "lpGraphicsData"
 inline constexpr GameText kSoundDataNotNull{0x698f00};     // "lpSoundData"
+// ------------------------------------------------------------ wip/panel-r7 batch
+inline constexpr GameText kNoName{0x69ffd0};            // "no name" (the side panel's players, CDrawer::DrawPanel)
+inline constexpr GameText kFormatPlusUnsigned{0x69ffd8};  // "+%u" (the build menu's extra costs, CDrawer::DrawPanel)
+inline constexpr GameText kArrow{0x69ffcc};             // "-->" (the side panel's trade grid, CDrawer::DrawPanel)
 }  // namespace s3re::game::texts
