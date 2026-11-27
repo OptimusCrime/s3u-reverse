@@ -18,13 +18,12 @@ batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch. The user wants each round followed by the next right away.**
 
 **Round 6 is merged and has its milestone evidence** (session 58 entry):
-main has wip/watcom-r6, png-r6, text-r6 and (round 7) cursor-r7; their
-worktrees and the r4/r5 ones are removed.
+main has wip/watcom-r6, png-r6, text-r6 and (round 7) cursor-r7 and
+panel-r7; their worktrees and the r4/r5 ones are removed.
 
 **Next batches (round 7):**
-- **The panel drawer 0x4b4d00 (71 KB)** and **the settler drawer 0x4c85a0
-  (38 KB)**, as separate batches; their helpers (text-r6's panel texts,
-  text surface, message texts) are done now.
+- The panel drawer CDrawer::DrawPanel 0x4b4d00 is done (panel-r7);
+  **the settler drawer 0x4c85a0 (38 KB)** is on wip/settlerdraw-r7.
 - **Watcom leftovers:** 129 rows, mostly misnamed game/lobby functions that
   inline vectors (rename them), plus a few iterators and copy constructors.
   0x472eb0 stays original (folded DebugLog call).
@@ -161,6 +160,13 @@ against the merge base; no row was changed on both sides except
   one kDDUnlock, specs appended; `--test` 1153/1153, emutest `--changed`
   27 functions 0 mismatches; verified 12,791 (48.57 % of the bytes); no
   whole-game check yet for 28.
+- wip/panel-r7 -> e5c5e18 (CDrawer::DrawPanel 0x4b4d00 in six panel_*.cpp
+  files, BuildingAnimationSlot 0x4b1a00): conflicts only texts.h and
+  specs/graphics.py (both appended); `--test` 1157/1157, emutest
+  `--changed` 0 mismatches, CDrawer_DrawPanel `--full` 8000 cases 0
+  mismatches 852/868 blocks (bounded spec); check_save slot 1 (2,000
+  ticks) identical to the original, DrawPanel 529 calls; verified 12,793
+  (51.75 % of the bytes), identical in a whole-game check 11,691 (42.75 %).
 
 ### 2026-11-26/27 (57): merges of rounds 4-5, static-initializer stubs, milestone evidence
 
