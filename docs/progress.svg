@@ -12,9 +12,9 @@
 <rect x="1056.8" y="100" width="519.2" height="40" fill="#e8a39b"><title>Not understood yet: 36.9%</title></rect>
 <text x="1316.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.9%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
-<rect x="170" y="154" width="625.1" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 44.5%</title></rect>
-<text x="482.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">44.5%</text>
-<rect x="795.1" y="154" width="134.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.6%</title></rect>
+<rect x="170" y="154" width="625.2" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 44.5%</title></rect>
+<text x="482.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">44.5%</text>
+<rect x="795.2" y="154" width="134.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.6%</title></rect>
 <text x="862.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.6%</text>
 <rect x="929.9" y="154" width="2.4" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
 <rect x="932.3" y="154" width="216.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 15.4%</title></rect>
@@ -33937,18 +33937,18 @@
 <text x="1181" y="874.3" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="1179.5" y="877.3" width="44.4" height="50.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_do_background @ 0x005a7900
 4096 bytes — Identified (purpose known)</title></rect>
-<rect x="1179.5" y="927.7" width="44.4" height="38.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_cHRM @ 0x005abd00
-3104 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1179.5" y="927.7" width="44.4" height="38.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_cHRM @ 0x005abd00
+3104 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1179.5" y="965.8" width="44.4" height="31.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_init_read_transformations @ 0x005a6220
 2576 bytes — Identified (purpose known)</title></rect>
 <rect x="1223.8" y="877.3" width="25.1" height="32.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_build_gamma_table @ 0x005a93d0
 1472 bytes — Identified (purpose known)</title></rect>
 <rect x="1223.8" y="909.3" width="25.1" height="29.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_tRNS @ 0x005ace60
 1360 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1223.8" y="939" width="25.1" height="29.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_sRGB @ 0x005ac920
-1344 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1223.8" y="968.2" width="25.1" height="29.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_pCAL @ 0x005ae430
-1344 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1223.8" y="939" width="25.1" height="29.3" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_sRGB @ 0x005ac920
+1344 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1223.8" y="968.2" width="25.1" height="29.3" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_pCAL @ 0x005ae430
+1344 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1248.9" y="877.3" width="25.6" height="25.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_bKGD @ 0x005ad3b0
 1200 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1248.9" y="902.9" width="25.6" height="23.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_PLTE @ 0x005aaea0
@@ -33963,12 +33963,12 @@
 1104 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1297.7" y="877.3" width="22.9" height="26" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_gAMA @ 0x005ab470
 1088 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1320.6" y="877.3" width="22.9" height="26" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_zTXt @ 0x005aeec0
-1088 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1343.4" y="877.3" width="21.5" height="26" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_do_read_transformations @ 0x005a6c30
-1024 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1365" y="877.3" width="21.2" height="26" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_do_gamma @ 0x005a8900
-1008 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1320.6" y="877.3" width="22.9" height="26" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_zTXt @ 0x005aeec0
+1088 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1343.4" y="877.3" width="21.5" height="26" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_do_read_transformations @ 0x005a6c30
+1024 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1365" y="877.3" width="21.2" height="26" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_do_gamma @ 0x005a8900
+1008 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1274.5" y="903.2" width="22" height="23.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_pHYs @ 0x005adcb0
 960 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1274.5" y="927" width="22" height="23.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_handle_oFFs @ 0x005ae070
@@ -34013,8 +34013,8 @@
 336 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1343" y="938.5" width="15.1" height="12.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_crc_finish @ 0x005aa930
 336 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1358.1" y="938.5" width="14.4" height="12.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_set_pCAL @ 0x005b1750
-320 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1358.1" y="938.5" width="14.4" height="12.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_set_pCAL @ 0x005b1750
+320 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1372.5" y="938.5" width="13.7" height="12.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_do_unpack @ 0x005a7030
 304 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1327.9" y="950.6" width="12.7" height="12.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>png_do_dither @ 0x005a92b0
@@ -34202,12 +34202,12 @@
 <g><title>CPNGDecoder: 4 functions</title><rect x="1422.2" y="949.4" width="24" height="22.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1422.7" y="949.9" width="18" height="21.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CPNGDecoder::DoDecode @ 0x005a4680
 690 bytes — Identified (purpose known)</title></rect>
-<rect x="1440.7" y="949.9" width="5" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CPNGDecoder::~CPNGDecoder @ 0x005a4600
-128 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1440.7" y="964" width="5" height="3.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CPNGDecoder::CPNGDecoder @ 0x005a45c0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1440.7" y="967.6" width="5" height="3.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CPNGDecoder::scalar_deleting_destructor @ 0x005a45e0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1440.7" y="949.9" width="5" height="14.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CPNGDecoder::~CPNGDecoder @ 0x005a4600
+128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1440.7" y="964" width="5" height="3.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CPNGDecoder::CPNGDecoder @ 0x005a45c0
+32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1440.7" y="967.6" width="5" height="3.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CPNGDecoder::scalar_deleting_destructor @ 0x005a45e0
+32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>CPicDecoder: 7 functions</title><rect x="1446.2" y="949.4" width="21.6" height="22.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1446.7" y="949.9" width="20.6" height="10.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CPicDecoder::MakeBmpFromFile @ 0x005a4a00
@@ -34244,16 +34244,16 @@
 16 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>CFileSource: 5 functions</title><rect x="1436.5" y="971.6" width="18.9" height="16.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1437" y="972.1" width="8.5" height="15.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::Open @ 0x005a9c60
-249 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1445.5" y="972.1" width="9.3" height="8.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::~CFileSource @ 0x005a9bd0
-144 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1445.5" y="980.4" width="4.7" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::Close @ 0x005a9de0
-64 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1450.2" y="980.4" width="4.7" height="3.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::CFileSource @ 0x005a9b90
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1450.2" y="984.1" width="4.7" height="3.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::scalar_deleting_destructor @ 0x005a9bb0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1437" y="972.1" width="8.5" height="15.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::Open @ 0x005a9c60
+249 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1445.5" y="972.1" width="9.3" height="8.3" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::~CFileSource @ 0x005a9bd0
+144 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1445.5" y="980.4" width="4.7" height="7.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::Close @ 0x005a9de0
+64 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1450.2" y="980.4" width="4.7" height="3.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::CFileSource @ 0x005a9b90
+32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1450.2" y="984.1" width="4.7" height="3.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CFileSource::scalar_deleting_destructor @ 0x005a9bb0
+32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>CDataSource: 5 functions</title><rect x="1436.5" y="988.3" width="18.9" height="9.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1437" y="988.8" width="5.6" height="8.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CDataSource::Attach @ 0x005b04a0
@@ -34270,8 +34270,8 @@
 <g><title>CTextException: 3 functions</title><rect x="1455.3" y="971.6" width="12.4" height="14" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1455.8" y="972.1" width="11.4" height="7.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CTextException::scalar_deleting_destructor @ 0x005a4290
 160 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1455.8" y="979.3" width="8.6" height="5.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CTextException::CTextException @ 0x005a4230
-96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1455.8" y="979.3" width="8.6" height="5.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CTextException::CTextException @ 0x005a4230
+96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1464.4" y="979.3" width="2.9" height="5.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CTextException::~CTextException @ 0x005a4330
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
@@ -34289,7 +34289,7 @@
 </g>
 </g>
 <g><rect x="1469.8" y="662.9" width="130.2" height="267.1" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="1474.8" y="675.9" font-size="12" font-weight="600" fill="#ffffff">Watcom container library — 99.6% verified (28.6% in a whole game)</text>
+<text x="1474.8" y="675.9" font-size="12" font-weight="600" fill="#ffffff">Watcom container library — 99.6% verified (29.0% in a whole game)</text>
 <g><title>DirectX::CSoundEffect: 3 functions</title><rect x="1471.8" y="681.9" width="36.7" height="28.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1472.3" y="682.4" width="14.4" height="27.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CSoundEffect::Restore @ 0x005c2d20
 672 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
@@ -34335,8 +34335,8 @@
 304 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1584.3" y="695.9" width="13.2" height="7.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Dirk_CPlayer::~WCValOrderedVector_Dirk_CPlayer @ 0x004141a0
 160 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1584.3" y="703" width="7.9" height="7.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Dirk_CPlayer::base_find @ 0x00437c30
-96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1584.3" y="703" width="7.9" height="7.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Dirk_CPlayer::base_find @ 0x00437c30
+96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1592.2" y="703" width="5.3" height="3.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Dirk_CPlayer::base_equivalent @ 0x00437530
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1592.2" y="706.6" width="5.3" height="3.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Dirk_CPlayer::scalar_deleting_destructor @ 0x004375d0
@@ -34351,32 +34351,32 @@
 272 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1488.4" y="722.5" width="7.4" height="10.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_DirectX_CRunningSession::base_init_upto @ 0x00463350
 128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1495.8" y="722.5" width="6.5" height="10.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_DirectX_CRunningSession::WCBareVectorBase_DirectX_CRunningSession_499690 @ 0x00499690
-112 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1495.8" y="722.5" width="6.5" height="10.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_DirectX_CRunningSession::WCBareVectorBase_DirectX_CRunningSession_499690 @ 0x00499690
+112 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCBareVectorBase_LobbyClient_priv_CLobbyServer: 4 functions</title><rect x="1502.9" y="710.6" width="26.6" height="22.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1503.4" y="711.1" width="16.5" height="10.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_LobbyClient_priv_CLobbyServer::~WCBareVectorBase_LobbyClient_priv_CLobbyServer_5e0390 @ 0x005e0390
 304 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1503.4" y="721.8" width="16.5" height="10.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_LobbyClient_priv_CLobbyServer::~WCBareVectorBase_LobbyClient_priv_CLobbyServer_5dff70 @ 0x005dff70
 304 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1519.9" y="711.1" width="9.1" height="17.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_LobbyClient_priv_CLobbyServer::~WCBareVectorBase_LobbyClient_priv_CLobbyServer_5e0170 @ 0x005e0170
-272 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1519.9" y="711.1" width="9.1" height="17.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_LobbyClient_priv_CLobbyServer::~WCBareVectorBase_LobbyClient_priv_CLobbyServer_5e0170 @ 0x005e0170
+272 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1519.9" y="728.5" width="9.1" height="4.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_LobbyClient_priv_CLobbyServer::base_init_upto @ 0x005dff30
 64 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCBareVectorBase_Lobby_CImageDescription: 4 functions</title><rect x="1529.5" y="710.6" width="23.4" height="22.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1530" y="711.1" width="16" height="11.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CImageDescription::~WCBareVectorBase_Lobby_CImageDescription_5de5e0 @ 0x005de5e0
 320 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1530" y="722.7" width="16" height="9.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CImageDescription::~WCBareVectorBase_Lobby_CImageDescription_5de9d0 @ 0x005de9d0
-272 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1530" y="722.7" width="16" height="9.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CImageDescription::~WCBareVectorBase_Lobby_CImageDescription_5de9d0 @ 0x005de9d0
+272 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1545.9" y="711.1" width="6.5" height="11.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CImageDescription::base_init_upto @ 0x005de4f0
 128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1545.9" y="722.6" width="6.5" height="10" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CImageDescription::WCBareVectorBase_Lobby_CImageDescription_5de570 @ 0x005de570
 112 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>WCBareVectorBase_void: 8 functions</title><rect x="1552.9" y="710.6" width="23" height="22.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1553.4" y="711.1" width="9.1" height="9.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_void::base_copy_4732f0 @ 0x004732f0
-144 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1553.4" y="711.1" width="9.1" height="9.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_void::base_copy_4732f0 @ 0x004732f0
+144 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1553.4" y="720.3" width="9.1" height="6.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_void::~WCBareVectorBase_void_472660 @ 0x00472660
 96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1553.4" y="726.4" width="9.1" height="6.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_void::~WCBareVectorBase_void_472bb0 @ 0x00472bb0
@@ -34389,8 +34389,8 @@
 96 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1562.5" y="726.1" width="8.6" height="6.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_void::~WCBareVectorBase_void_462f10 @ 0x00462f10
 96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1571.1" y="719.7" width="4.3" height="12.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_void::~WCBareVectorBase_void_5bdf70 @ 0x005bdf70
-96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1571.1" y="719.7" width="4.3" height="12.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_void::~WCBareVectorBase_void_5bdf70 @ 0x005bdf70
+96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCBareVectorBase_Dirk_CPlayer: 5 functions</title><rect x="1575.9" y="710.6" width="22.1" height="22.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1576.4" y="711.1" width="11.9" height="10.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Dirk_CPlayer::CopyContents @ 0x004a13d0
@@ -34447,8 +34447,8 @@
 <g><title>WCBareVectorBase_Lobby_CSocketAddress: 3 functions</title><rect x="1556.8" y="733.1" width="20.8" height="21.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1557.3" y="733.6" width="10.7" height="17.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CSocketAddress::~WCBareVectorBase_Lobby_CSocketAddress_5deb60 @ 0x005deb60
 320 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1568.1" y="733.6" width="9.1" height="17.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CSocketAddress::~WCBareVectorBase_Lobby_CSocketAddress_5df1a0 @ 0x005df1a0
-272 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1568.1" y="733.6" width="9.1" height="17.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CSocketAddress::~WCBareVectorBase_Lobby_CSocketAddress_5df1a0 @ 0x005df1a0
+272 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1557.3" y="750.7" width="19.8" height="3.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_Lobby_CSocketAddress::base_init_upto @ 0x005deae0
 128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
@@ -34485,8 +34485,8 @@
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_WCValOrderedVector_String: 4 functions</title><rect x="1512.7" y="755" width="17.5" height="20.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1513.2" y="755.5" width="16.5" height="13.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_WCValOrderedVector_String::base_new_node @ 0x00459030
-384 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1513.2" y="755.5" width="16.5" height="13.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_WCValOrderedVector_String::base_new_node @ 0x00459030
+384 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1513.2" y="768.6" width="8.3" height="6.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_WCValOrderedVector_String::~WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_WCValOrderedVector_String @ 0x00457cb0
 96 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1521.5" y="768.6" width="5.5" height="6.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_WCValOrderedVector_String::base_destroy_node @ 0x004591b0
@@ -34531,8 +34531,8 @@
 64 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_WCPtrSortedVector_CExecuteType: 4 functions</title><rect x="1471.8" y="775.7" width="19.2" height="17.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1472.3" y="776.2" width="11.6" height="16.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_WCPtrSortedVector_CExecuteType::base_new_node @ 0x00472c70
-336 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1472.3" y="776.2" width="11.6" height="16.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_WCPtrSortedVector_CExecuteType::base_new_node @ 0x00472c70
+336 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1483.8" y="776.2" width="6.6" height="8.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_WCPtrSortedVector_CExecuteType::~WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_WCPtrSortedVector_CExecuteType @ 0x00472120
 96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1483.8" y="784.4" width="6.6" height="5.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_WCPtrSortedVector_CExecuteType::base_destroy_node @ 0x00472dc0
@@ -34601,8 +34601,8 @@
 <g><title>WCValOrderedVector_Lobby_CImageDescription: 4 functions</title><rect x="1471.8" y="793.1" width="16.8" height="16.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1472.3" y="793.6" width="15.8" height="10.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CImageDescription::~WCValOrderedVector_Lobby_CImageDescription @ 0x005dd760
 288 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1472.3" y="803.9" width="9.5" height="5.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CImageDescription::base_find @ 0x005de970
-96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1472.3" y="803.9" width="9.5" height="5.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CImageDescription::base_find @ 0x005de970
+96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1481.7" y="803.9" width="3.2" height="5.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CImageDescription::base_equivalent @ 0x005dd740
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1484.9" y="803.9" width="3.2" height="5.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CImageDescription::scalar_deleting_destructor @ 0x005ddcd0
@@ -34621,8 +34621,8 @@
 <g><title>WCValSkipListDict_unsigned_int_WCValOrderedVector_String: 3 functions</title><rect x="1505.3" y="793.1" width="16.2" height="16.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1505.8" y="793.6" width="15.2" height="8.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_WCValOrderedVector_String::~WCValSkipListDict_unsigned_int_WCValOrderedVector_String @ 0x00457d90
 240 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1505.8" y="802.5" width="12.6" height="7.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_WCValOrderedVector_String::WCValSkipListDict_unsigned_int_WCValOrderedVector_String @ 0x00457c10
-160 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1505.8" y="802.5" width="12.6" height="7.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_WCValOrderedVector_String::WCValSkipListDict_unsigned_int_WCValOrderedVector_String @ 0x00457c10
+160 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1518.4" y="802.5" width="2.5" height="7.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_WCValOrderedVector_String::scalar_deleting_destructor @ 0x00457d70
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
@@ -34633,8 +34633,8 @@
 144 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock: 6 functions</title><rect x="1537.6" y="793.1" width="15.6" height="16.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1538.1" y="793.6" width="8.7" height="9.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::base_new_node @ 0x0060a6d0
-144 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1538.1" y="793.6" width="8.7" height="9.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::base_new_node @ 0x0060a6d0
+144 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1546.8" y="793.6" width="5.8" height="9.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::~WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock @ 0x00609bb0
 96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1538.1" y="802.8" width="5.3" height="6.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::base_destroy_node @ 0x0060a760
@@ -34749,8 +34749,8 @@
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock: 5 functions</title><rect x="1516.4" y="810" width="14" height="15.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1516.9" y="810.5" width="7" height="10.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::WCValSkipListDict_copy @ 0x00609a20
-128 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1516.9" y="810.5" width="7" height="10.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::WCValSkipListDict_copy @ 0x00609a20
+128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1523.9" y="810.5" width="6.1" height="10.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::~WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock @ 0x00609aa0
 112 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1516.9" y="820.6" width="4.3" height="4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::base_equivalent @ 0x006099e0
@@ -34813,8 +34813,8 @@
 <g><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo: 5 functions</title><rect x="1487.6" y="839.9" width="13.8" height="14" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1488.1" y="840.4" width="7" height="7.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::~WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo @ 0x00472600
 96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1495.1" y="840.4" width="5.8" height="7.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::base_new_node @ 0x00472e60
-80 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1495.1" y="840.4" width="5.8" height="7.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::base_new_node @ 0x00472e60
+80 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1488.1" y="847.9" width="6.4" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::vf04 @ 0x00472eb0
 64 bytes — Classified (class/role known)</title></rect>
 <rect x="1494.5" y="847.9" width="3.2" height="5.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::insert @ 0x00472400
@@ -34831,8 +34831,8 @@
 288 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCValSkipListDictIter_unsigned_long_WCPtrSortedVector_CExecuteType: 1 functions</title><rect x="1487.6" y="881" width="13.8" height="12.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1488.1" y="881.5" width="12.8" height="11.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDictIter_unsigned_long_WCPtrSortedVector_CExecuteType::value @ 0x00472ef0
-272 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1488.1" y="881.5" width="12.8" height="11.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDictIter_unsigned_long_WCPtrSortedVector_CExecuteType::value @ 0x00472ef0
+272 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCValOrderedVector_DirectX_CDisplayMode: 4 functions</title><rect x="1487.6" y="893.5" width="13.8" height="11.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1488.1" y="894" width="9.6" height="5.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_DirectX_CDisplayMode::~WCValOrderedVector_DirectX_CDisplayMode @ 0x005b7c10
@@ -34855,8 +34855,8 @@
 <g><title>WCValOrderedVector_unsigned_short: 4 functions</title><rect x="1487.6" y="917" width="13.8" height="11" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1488.1" y="917.5" width="5.1" height="10" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_unsigned_short::~WCValOrderedVector_unsigned_short @ 0x00462870
 96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1493.2" y="917.5" width="7.7" height="5.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_unsigned_short::base_find @ 0x00462e60
-80 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1493.2" y="917.5" width="7.7" height="5.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_unsigned_short::base_find @ 0x00462e60
+80 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1493.2" y="923.1" width="3.8" height="4.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_unsigned_short::base_equivalent @ 0x00462850
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1497.1" y="923.1" width="3.8" height="4.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_unsigned_short::scalar_deleting_destructor @ 0x00462b60
@@ -34879,8 +34879,8 @@
 <g><title>WCOrderedVectorBase_String: 2 functions</title><rect x="1527.1" y="825.2" width="12" height="11.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1527.6" y="825.7" width="6.3" height="10.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCOrderedVectorBase_String::WCOrderedVectorBase_String_457ea0 @ 0x00457ea0
 128 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1533.8" y="825.7" width="4.7" height="10.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCOrderedVectorBase_String::base_find @ 0x0040a220
-96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1533.8" y="825.7" width="4.7" height="10.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCOrderedVectorBase_String::base_find @ 0x0040a220
+96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCValOrderedVector_Lobby_CLMGeneric: 3 functions</title><rect x="1539" y="825.2" width="12" height="11.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1539.5" y="825.7" width="7.8" height="10.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CLMGeneric::~WCValOrderedVector_Lobby_CLMGeneric @ 0x00609940
@@ -35209,8 +35209,8 @@
 128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCSkipListBase_WCSkipListDictKeyVal_HWND___Win32_CCDAudio: 2 functions</title><rect x="1532" y="866" width="9.1" height="8.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1532.5" y="866.5" width="6.1" height="7.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_HWND___Win32_CCDAudio::~WCSkipListBase_WCSkipListDictKeyVal_HWND___Win32_CCDAudio @ 0x00616150
-96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1532.5" y="866.5" width="6.1" height="7.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_HWND___Win32_CCDAudio::~WCSkipListBase_WCSkipListDictKeyVal_HWND___Win32_CCDAudio @ 0x00616150
+96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1538.7" y="866.5" width="2" height="7.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_HWND___Win32_CCDAudio::scalar_deleting_destructor @ 0x00616130
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
@@ -35413,8 +35413,8 @@
 96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCOrderedVectorBase_LobbyClient_CPrivateChat: 1 functions</title><rect x="1567.9" y="900.1" width="6.5" height="9.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1568.4" y="900.6" width="5.5" height="8.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCOrderedVectorBase_LobbyClient_CPrivateChat::base_find @ 0x0044dc30
-96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1568.4" y="900.6" width="5.5" height="8.3" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCOrderedVectorBase_LobbyClient_CPrivateChat::base_find @ 0x0044dc30
+96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>WCBareVectorBase_DirectX_CDirectDrawDevice: 1 functions</title><rect x="1567.9" y="909.4" width="6.5" height="6.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1568.4" y="909.9" width="5.5" height="5.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_DirectX_CDirectDrawDevice::base_init_upto @ 0x005b8040

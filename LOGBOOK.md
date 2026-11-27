@@ -17,26 +17,34 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch. The user wants each round followed by the next right away.**
 
-**Round 6 is merged and has its milestone evidence** (session 58 entry):
-main has wip/watcom-r6, png-r6, text-r6 and (round 7) cursor-r7,
-panel-r7 and settlerdraw-r7; their worktrees and the r4/r5 ones are removed.
+**Round 7 is merged** (session 58 entry): main has cursor-r7, panel-r7,
+settlerdraw-r7 and libs-r7; all worktrees are removed. The round's
+evidence run is done (full emulator suite, self-test, whole-game checks
+against the original: all identical; session 58 entry).
 
-**Next batches (round 7):**
-- The panel drawer CDrawer::DrawPanel 0x4b4d00 (panel-r7) and the settler
-  drawer CDrawer::QueueSettler 0x4c85a0 (settlerdraw-r7) are done; next in
-  the frame drawer's tree: Render_sub_4b26c0 (needs 0x54cbd0).
-- **Watcom leftovers:** 129 rows, mostly misnamed game/lobby functions that
-  inline vectors (rename them), plus a few iterators and copy constructors.
+**Next jobs, in order:**
+1. Render_sub_4b26c0 (the next piece of the frame drawer's tree after
+   DrawPanel and QueueSettler); it needs the landscape renderer
+   Render_sub_54cbd0 0x54cbd0 first (with the CLandscapeSurface ctor
+   0x54bd30 and the CGameDrawer ctor/dtor leftovers).
+2. **CRT "platform library" status** (CLAUDE.md "Library and compiler
+   code", backlog `docs/todo/evidence.md`): the status for the CRT
+   functions the game doesn't depend on, counted apart from verified.
+3. The 28 odd static-initializer stubs that tools/static_inits.py's
+   classes don't cover.
+4. The png_read_* in-process test that hangs (backlog
+   `docs/todo/evidence.md`; libs-r7 verified them by the emulator); the
+   6 unverified libpng functions from libs-r7 (re/picture_code.md).
+5. Console/startup code: App_sub_40d700 and the rest of
+   CConsoleThread::OnStart's callees.
+6. Then the **decision point on network code** (so far skipped, user
+   decision 2026-11-09): ask the user whether the lobby/net threads come
+   next or the AI (CComputerPlayer::Step 0x550f80).
+- Watcom leftovers: after libs-r7's 101 recategorizations, the rest are
+  misnamed game/lobby functions that inline vectors (rename them).
   0x472eb0 stays original (folded DebugLog call).
   GamePlayerSetup_Assign_MatchesOriginal is possibly flaky (heap-address
-  dependent; passed in all three session-58 runs; backlog it if it fails).
-- **PNG leftovers:** png_read_start_row / finish_row are reimplemented but
-  unverified; cHRM/sRGB/zTXt/pCAL handlers, gamma, read transformations,
-  png_read_info/row/image/end, png_create_read_struct (setjmp), PaintLib
-  DoDecode/MakeBmp/CFileSource (list in re/picture_code.md).
-- **CRT "platform library" status** (CLAUDE.md "Library and compiler
-  code", backlog `docs/todo/evidence.md`): the status for the CRT
-  functions the game doesn't depend on, counted apart from verified.
+  dependent; passed in all session-58 runs; backlog it if it fails).
 
 Backlog of the rest: `TODO.md` and `docs/todo/*.md`. Session 56's
 leftover list is mostly done (LoadSaveGame, InitPlayerInfo, the tiny
@@ -121,7 +129,7 @@ testing".
 
 ## Session log (recent sessions; older ones in docs/history/)
 
-### 2026-11-27 (58): round 6 merged, milestone evidence
+### 2026-11-27 (58): rounds 6 and 7 merged, milestone evidence
 
 Merged into main, one at a time (re/functions.csv three-way per row
 against the merge base; no row was changed on both sides except
@@ -175,6 +183,30 @@ against the merge base; no row was changed on both sides except
   CDrawer_QueueSettler 8000 cases 0 mismatches 547/547 blocks;
   check_save slot 1 identical, 14,479 calls; verified 12,794 (53.46 % of
   the bytes), identical in a whole-game check 11,692 (44.46 %).
+- wip/libs-r7 -> c99bb55 (37 Watcom/libpng/PaintLib functions verified,
+  6 libpng unverified, 101 rows renamed/recategorized, SetErrorMode API
+  probe, WrongFinishRow self-test pairing). Duplicate: the Watcom vector
+  constructors 0x5b7ec0 / 0x5b7f40 were in both main (cursor-r7) and the
+  branch, in the same file bare_vectors.cpp with identical code: the
+  branch's functions, hooks, table entries, specs and vtable constants
+  dropped, main's kept (verified_by gains the branch's
+  wrong-implementation test). re/functions.csv three-way: only those two
+  and 0x5b69c0 (CDirectDrawDevice::IsEqual: main's verified row, the
+  branch's category game) changed on both sides. Debug + Release build,
+  `--test` 1167/1167 (it took 48 min while the full emulator suite ran
+  next to it), emutest `--changed` 0 mismatches. Worktree removed.
+- Round 7 evidence on c99bb55: full emulator suite (`--full
+  --require-coverage`, Release, 16 workers, 36 min): 12,834 functions,
+  0 mismatches, 1 with incomplete coverage (CDrawer_DrawPanel, bounded
+  spec, 852/868 blocks as designed); `--self-test` 41/41 + RAM
+  "separate". Whole-game checks against the original (Debug; the
+  original's traces from the cache): check_save slots 1-3 (2,000
+  ticks), check_random_map 384,0 and 448,3 (1,000 ticks),
+  scripted-seed127 replay (3,000 ticks): all identical;
+  record_call_counts.py: 28 rows updated.
+- Numbers (progress.py): verified 12,829 functions, game code 45.5 %
+  verified (headline; 37.5 % in a whole game), all code 54.05 % of the
+  bytes; identical in a whole-game check 11,693 functions (44.46 %).
 
 ### 2026-11-26/27 (57): merges of rounds 4-5, static-initializer stubs, milestone evidence
 
