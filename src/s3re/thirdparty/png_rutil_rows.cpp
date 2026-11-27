@@ -465,8 +465,8 @@ void __cdecl png_read_start_row(PngStruct* png) {
 // png_error, whose error callback here throws), random masks and passes,
 // with and without PNG_PACKSWAP. Compared: the row buffers with guard
 // bytes, row_info, the png_struct and the error messages.
-// png_read_start_row and png_read_finish_row are compared within whole PNG
-// decodes (png_read_tests.cpp).
+// png_read_start_row and png_read_finish_row: emulator specs only so far
+// (unverified; a whole-decode test is in the backlog, docs/todo/evidence.md).
 
 namespace {
 

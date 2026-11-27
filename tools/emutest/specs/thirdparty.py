@@ -1765,3 +1765,284 @@ SPECS += [
          zi_args(pc_set_pcal_case, "png", "info", "purpose", "x0", "x1", "type", "n", "units", "params"),
          presets=zi_presets, callees=TP_CALLEES, eax_mask=0),
 ]
+
+
+# -- png_read.cpp: png_read_info, png_read_row, png_read_image, png_read_end (libs-r7) --
+#
+# The chunk handlers are probed (they have their own specs and consume
+# nothing here); the stream (ph_read) holds the rest of the signature (or a
+# corrupted one) and chunk headers (length, name), ending with IDAT for
+# png_read_info and with IEND for png_read_end (the IEND probe sets
+# HAVE_IEND, as the handler does), with CRC bytes where png_crc_finish runs.
+# png_read_row: its callees probed (png_read_start_row, png_read_finish_row,
+# png_read_filter_row, png_do_read_transformations, png_do_read_interlace,
+# png_combine_row, the read_row_fn callback at +0x190 through a probed
+# address, inflate as for png_read_finish_row); png_crc_finish and
+# png_memcpy_check run.
+
+import zlib as _rd_zlib
+
+RD_HANDLERS = (0x005AAB20, 0x005AAEA0, 0x005AB300, 0x005AD3B0, 0x005ABD00, 0x005AB470, 0x005AD860, 0x005AE070,
+               0x005AE430, 0x005ADCB0, 0x005AB8B0, 0x005AC920, 0x005AED30, 0x005AE970, 0x005ACE60, 0x005AEEC0,
+               0x005AF300)
+RD_NAMES = (b"IHDR", b"PLTE", b"IEND", b"bKGD", b"cHRM", b"gAMA", b"hIST", b"oFFs", b"pCAL", b"pHYs", b"sBIT",
+            b"sRGB", b"tEXt", b"tIME", b"tRNS", b"zTXt", b"abCd", b"IDAT")
+RD_ROW_CALLBACK = 0x005A5020   # png_get_io_ptr: only reached here through read_row_fn
+
+
+def rd_set_iend(machine, ecx, args, h):
+    png = args[0]
+    mode = int.from_bytes(machine.guest_read(png + 0x60, 4), "little")
+    machine.guest_write(png + 0x60, (mode | 0x10).to_bytes(4, "little"))
+    return None
+
+
+RD_CALLEES = dict(PH_CALLEES)
+for _rd_address in RD_HANDLERS:
+    RD_CALLEES[_rd_address] = (3, "cdecl", "probe")
+RD_CALLEES[0x005AB300] = (3, "cdecl", "probe", rd_set_iend)
+
+
+def rd_chunks(rng, last, crcs=False):
+    out = bytearray()
+    for _ in range(rng.randrange(6)):
+        name = rng.choice(RD_NAMES[:-1]) if rng.random() < 0.9 else bytes(rng.getrandbits(8) for _ in range(4))
+        if name == last:
+            continue
+        if name == b"IDAT" and crcs:
+            out += rng.choice((0, 0, 1, rng.getrandbits(32))).to_bytes(4, "big") + name
+            out += bytes(rng.getrandbits(8) for _ in range(4))
+            continue
+        out += rng.getrandbits(32).to_bytes(4, "big") + name
+    if crcs and rng.random() < 0.3:  # an empty IDAT right after the image data
+        out += bytes(4) + b"IDAT" + bytes(rng.getrandbits(8) for _ in range(4))
+    out += rng.choice((0, 1, 300, rng.getrandbits(32))).to_bytes(4, "big") + last
+    return bytes(out)
+
+
+def rd_info_case(rng):
+    presets = tp_png_struct(rng)
+    checked = rng.choice((0, 0, 1, 3, 4, 5, 7, 8, rng.getrandbits(8)))
+    signature = bytearray(b"\x89PNG\r\n\x1a\n")
+    if rng.random() < 0.3:
+        signature[rng.randrange(8)] ^= 1 << rng.randrange(8)
+    stream = bytes(signature[min(checked, 8):]) + rd_chunks(rng, b"IDAT") + bytes(16)
+    presets += [(TP_PNG + 0x124, checked, 1), (TP_INFO + 0x20, int.from_bytes(bytes(signature), "little"), 8),
+                (TP_PNG + 0x60, rng.choice((0, 1, 3, 1, rng.getrandbits(32))), 4),
+                (TP_PNG + 0x11e, rng.choice((0, 2, 3, 3, 6)), 1),
+                (TP_PNG + 0x114, int.from_bytes(b"IHDR", "little"), 4),
+                (PH_CURSOR, 0, 4), (PH_STREAM, int.from_bytes(stream, "little"), len(stream))]
+    return {"png": TP_PNG_PTR, "info": TP_INFO_PTR, "presets": presets}
+
+
+def rd_end_case(rng):
+    presets = tp_png_struct(rng)
+    stream = bytes(rng.getrandbits(8) for _ in range(4)) + rd_chunks(rng, b"IEND", crcs=True) + bytes(16)
+    presets += [(TP_PNG + 0x60, rng.choice((5, 7, 13, 15, rng.getrandbits(32) & ~0x10)), 4),
+                (TP_PNG + 0x114, int.from_bytes(b"IDAT", "little"), 4),
+                (PH_CURSOR, 0, 4), (PH_STREAM, int.from_bytes(stream, "little"), len(stream))]
+    return {"png": TP_PNG_PTR, "info": TP_INFO_PTR, "presets": presets}
+
+
+def rd_inflate(machine, ecx, args, h):
+    """inflate for png_read_row: consumes input, writes up to avail_out
+    bytes, returns Z_OK (mostly), Z_STREAM_END or an error."""
+    z = args[0]
+
+    def get(off):
+        return int.from_bytes(machine.guest_read(z + off, 4), "little")
+    next_in, avail_in, next_out, avail_out = get(0), get(4), get(0xc), get(0x10)
+    used = min(avail_in, (h >> 8) % 64)
+    made = min(avail_out, (h >> 16) % 3 * ((h >> 18) % 300))
+    if made:
+        machine.guest_write(next_out, bytes((h + 7 * k) & 0xFF for k in range(made)))
+    machine.guest_write(z, (next_in + used).to_bytes(4, "little"))
+    machine.guest_write(z + 4, (avail_in - used).to_bytes(4, "little"))
+    machine.guest_write(z + 0xc, (next_out + made).to_bytes(4, "little"))
+    machine.guest_write(z + 0x10, (avail_out - made).to_bytes(4, "little"))
+    r = (h >> 32) % 24
+    if r == 0:
+        machine.guest_write(z + 0x18, (0 if (h >> 40) & 1 else PRF_ERROR_MSG).to_bytes(4, "little"))
+        return 0xFFFFFFFD
+    return 1 if r < 3 else 0
+
+
+RD_ROW_CALLEES = dict(PRF_CALLEES)
+RD_ROW_CALLEES.update({
+    0x005AA4A0: (2, "cdecl", "probe", rd_inflate, lambda m, ecx, a: (a[0], a[1])),  # inflate
+    0x005B01C0: (1, "cdecl", "probe"),   # png_read_start_row
+    0x005AFE20: (1, "cdecl", "probe"),   # png_read_finish_row
+    0x005AFC40: (5, "cdecl", "probe"),   # png_read_filter_row
+    0x005A6C30: (1, "cdecl", "probe"),   # png_do_read_transformations
+    0x005AF7F0: (4, "cdecl", "probe"),   # png_do_read_interlace
+    0x005AF4D0: (3, "cdecl", "probe"),   # png_combine_row
+    RD_ROW_CALLBACK: (3, "cdecl", "probe"),
+})
+
+
+def rd_row_case(rng):
+    case = prf_rows(rng)
+    presets = case["presets"]
+    presets += [
+        (TP_PNG + 0x64, rng.getrandbits(32) & ~0x60 | rng.choice((0x40, 0x40, 0x40, 0, 0x60)), 4),
+        (TP_PNG + 0x68, rng.choice((0, 2, 2, rng.getrandbits(32))), 4),
+        (TP_PNG + 0x60, rng.choice((4, 5, 7, 0, rng.getrandbits(32))), 4),
+        (TP_PNG + 0x11c, rng.choice((0, 1, 2, 3, 4, 5, 6, rng.randrange(256))), 1),
+        (TP_PNG + 0xc0, rng.choice((1, 2, 3, 4, 5, 6, rng.randrange(300))), 4),
+        (TP_PNG + 0xdc, rng.randrange(16), 4),
+        (TP_PNG + 0xd4, rng.choice((1, 2, 5, 40, rng.randrange(0x200))), 4),
+        (TP_PNG + 0xd0, rng.randrange(0x200), 4),
+        (TP_PNG + 0xd8, rng.randrange(0x100), 4),
+        (TP_PNG + 0xe4, WORLD_BASE + SCRATCH + 0xA000, 4),
+        (TP_PNG + 0x190, rng.choice((0, RD_ROW_CALLBACK)), 4),
+    ]
+    row = rng.choice((0, WORLD_BASE + SCRATCH + 0xC000))
+    dsp = rng.choice((0, WORLD_BASE + SCRATCH + 0xD000))
+    return {"png": TP_PNG_PTR, "row": row, "dsp": dsp, "presets": presets}
+
+
+def rd_image_case(rng):
+    presets = tp_png_struct(rng)
+    height = rng.choice((0, 1, 2, 5, rng.randrange(20)))
+    presets += [(TP_PNG + 0xc4, height, 4), (TP_PNG + 0x11b, rng.choice((0, 1, 1)), 1),
+                (TP_PNG + 0x68, rng.getrandbits(32), 4)]
+    presets += [(SCRATCH + 0xE000 + 4 * k, WORLD_BASE + SCRATCH + 0x100 * k, 4) for k in range(20)]
+    return {"png": TP_PNG_PTR, "image": WORLD_BASE + SCRATCH + 0xE000, "presets": presets}
+
+
+SPECS += [
+    Spec("png_read_info", 0x005a5180, "stdcall", zi_args(rd_info_case, "png", "info"), presets=zi_presets,
+         callees=RD_CALLEES, eax_mask=0, max_cases=4000, case_scale=2),
+    Spec("png_read_end", 0x005a58f0, "stdcall", zi_args(rd_end_case, "png", "info"), presets=zi_presets,
+         callees=RD_CALLEES, eax_mask=0, max_cases=4000, case_scale=2),
+    Spec("png_read_row", 0x005a5440, "stdcall", zi_args(rd_row_case, "png", "row", "dsp"), presets=zi_presets,
+         callees=RD_ROW_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
+    Spec("png_read_image", 0x005a5890, "stdcall", zi_args(rd_image_case, "png", "image"), presets=zi_presets,
+         callees={0x005A5440: (3, "cdecl", "probe")}, eax_mask=0),
+]
+
+
+# -- paintlib2.cpp: CTextException's constructor, CPNGDecoder, CFileSource (libs-r7) --
+# The object at world 0; the text / path in scratch slot 0. SetErrorMode
+# (only CTextException's constructor calls it) gets an API probe here; the
+# file functions' APIs have theirs in emu.py. CFileSource::Open's catch
+# block (0x5a9d59..0x5a9d8a: Attach throwing, which it doesn't: the game's
+# operator new returns null, then the copy faults) is exempt.
+
+import emu as _pl_emu
+
+_pl_emu.API_HANDLERS.setdefault("SetErrorMode", (1, _pl_emu._api_success("SetErrorMode", 0x5E000020)))
+
+PL2_TEXT = SCRATCH
+
+
+def pl2_text(rng, pool, args):
+    text = bytes(0x41 + rng.randrange(26) for _ in range(rng.choice((0, 1, 5, rng.randrange(60))))) + b"\0"
+    return [(PL2_TEXT, int.from_bytes(text, "little"), len(text))]
+
+
+def pl2_source(rng, pool, args):
+    """A file source: data / cursor / name null or set, handles null or not."""
+    fields = pl2_text(rng, pool, args)
+    fields += [(0x04, rng.choice((0, WORLD_BASE + SCRATCH + 0x800)), 4),
+               (0x08, rng.choice((0, WORLD_BASE + SCRATCH + 0x900)), 4),
+               (0x0c, rng.choice((0, WORLD_BASE + SCRATCH + 0xA00)), 4),
+               (0x18, rng.choice((0, 0, rng.getrandbits(32))), 4),
+               (0x1c, rng.choice((0, rng.getrandbits(32))), 4)]
+    return fields
+
+
+PL2_TEXT_ARG = one_of(WORLD_BASE + PL2_TEXT)
+SPECS += [
+    Spec("CTextException_Construct", 0x005a4230, "thiscall", [anything, PL2_TEXT_ARG], presets=pl2_text),
+    Spec("CPNGDecoder_Construct", 0x005a45c0, "thiscall", []),
+    # (cover_until: 0x5a4610 is PaintLib's PNG read callback, a function start
+    # missing from the lists.)
+    Spec("CPNGDecoder_Destroy", 0x005a4600, "thiscall", [], presets=pl_trace_global, eax_mask=0,
+         cover_until=0x005a4610),
+    Spec("CPNGDecoder_DeletingDestructor", 0x005a45e0, "thiscall", [one_of(0, 1, 2, 3, 0xFFFFFFFF)],
+         presets=pl_trace_global),
+    Spec("CFileSource_Construct", 0x005a9b90, "thiscall", []),
+    Spec("CFileSource_Destroy", 0x005a9bd0, "thiscall", [], presets=pl2_source, eax_mask=0),
+    Spec("CFileSource_DeletingDestructor", 0x005a9bb0, "thiscall", [one_of(0, 1, 2, 3)], presets=pl2_source),
+    Spec("CFileSource_Close", 0x005a9de0, "thiscall", [], presets=pl2_source),
+    Spec("CFileSource_Open", 0x005a9c60, "thiscall", [PL2_TEXT_ARG], presets=pl2_source,
+         exempt_blocks=(0x005a9d59, 0x005a9d60, 0x005a9d67, 0x005a9d71, 0x005a9d78, 0x005a9d7f, 0x005a9d86)),
+]
+
+
+# -- png_rtran.cpp: png_do_read_transformations (libs-r7) -------------------------
+# Every row transformation is probed (they have their own specs; do_gamma
+# and do_background are still the original's); the user transform callback
+# goes through a probed address; png_do_chop (inlined) runs on a row in
+# scratch. The dither probe's effect sets row_info.rowbytes to 0 now and
+# then (the error path).
+
+RT_ROW_CALLBACK = 0x005A5020   # png_get_io_ptr: only reached here through read_user_transform_fn
+
+
+def rt_dither(machine, ecx, args, h):
+    if h % 5 == 0:
+        machine.guest_write(args[0] + 4, bytes(4))
+    return None
+
+
+RT_CALLEES = dict(TP_CALLEES)
+RT_CALLEES.update({
+    0x005A8CF0: (5, "cdecl", "probe"), 0x005A8F20: (3, "cdecl", "probe"), 0x005A5F10: (3, "cdecl", "probe"),
+    0x005A77B0: (2, "cdecl", "probe"), 0x005A7900: (12, "cdecl", "probe"), 0x005A8900: (5, "cdecl", "probe"),
+    0x005A92B0: (4, "cdecl", "probe", rt_dither), 0x005A5E60: (2, "cdecl", "probe"),
+    0x005A7160: (3, "cdecl", "probe"), 0x005A7030: (2, "cdecl", "probe"), 0x005A6120: (2, "cdecl", "probe"),
+    0x005A5EC0: (2, "cdecl", "probe"), 0x005A7550: (4, "cdecl", "probe"), 0x005A7440: (2, "cdecl", "probe"),
+    0x005A7340: (2, "cdecl", "probe"), 0x005A5E90: (2, "cdecl", "probe"), RT_ROW_CALLBACK: (3, "cdecl", "probe"),
+})
+
+
+def rt_presets(rng, pool, args):
+    presets = tp_png_struct(rng)
+    bits = rng.getrandbits(21)
+    if rng.random() < 0.5:
+        bits &= rng.getrandbits(21)
+    presets += [
+        (TP_PNG + 0x68, bits, 4),
+        (TP_PNG + 0x64, rng.getrandbits(32) & ~0x20000 | rng.choice((0, 0x20000)), 4),
+        (TP_PNG + 0xe4, 0 if rng.random() < 0.05 else WORLD_BASE + SCRATCH + 0x9000, 4),
+        (TP_PNG + 0xf8, rng.choice((0, 1, 5, rng.randrange(100))), 4),
+        (TP_PNG + 0x100, rng.choice((0, 2, 3, 4, 6, rng.getrandbits(8))), 1),
+        (TP_PNG + 0x101, rng.choice((16, 16, 8, 1, rng.getrandbits(8))), 1),
+        (TP_PNG + 0x102, rng.choice((1, 2, 3, 4, rng.randrange(8))), 1),
+        (TP_PNG + 0x112, rng.choice((0, 0, 1, rng.getrandbits(16))), 2),
+        (TP_PNG + 0x11e, rng.choice((0, 2, 3, 4, 6, rng.getrandbits(8))), 1),
+        (TP_PNG + 0x54, rng.choice((0, RT_ROW_CALLBACK)), 4),
+        (TP_PNG + 0xdc, rng.getrandbits(32), 4),
+        (TP_PNG + 0x11c, rng.getrandbits(8), 1),
+    ]
+    return presets
+
+
+SPECS += [
+    tp_spec("png_do_read_transformations", 0x005a6c30, [TP_PNG_ARG], presets=rt_presets, callees=RT_CALLEES,
+            eax_mask=0, max_cases=4000, case_scale=2),
+]
+
+
+# -- png_rtran.cpp: png_do_gamma (libs-r7) ---------------------------------------
+# The 8-bit table in TP_TABLES (or none), the 16-bit table: 256 row pointers
+# at TP_TABLES + 0x1000 (or none), each to one of 16 rows of 256 entries;
+# gamma_shift 0..8 or any (the hardware masks it).
+GM_ROWS = TP_TABLES + 0x1000
+GM_DATA = TP_TABLES + 0x2000
+
+
+def gm_presets(rng, pool, args):
+    presets = tp_row_info(rng, pool, args)
+    presets += [(GM_ROWS + 4 * k, WORLD_BASE + GM_DATA + 0x200 * (k % 16), 4) for k in range(256)]
+    return presets
+
+
+SPECS += [
+    tp_row_spec("png_do_gamma", 0x005a8900,
+                [one_of(0, TP_TABLES_PTR, TP_TABLES_PTR), one_of(0, WORLD_BASE + GM_ROWS, WORLD_BASE + GM_ROWS),
+                 lambda rng, pool: rng.choice((0, 1, 4, 7, 8, rng.getrandbits(32)))],
+                presets=gm_presets),
+]

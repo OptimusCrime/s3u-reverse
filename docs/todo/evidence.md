@@ -148,3 +148,11 @@ cast within ~8 tiles of the map edge (kept).
   CListBox_UpdateLayout's spec uses cover_until=0x41f6a1. Add it as a
   `manual` row of re/extra_functions.tsv (changes every spec's harness
   fingerprint, so together with other list changes).
+
+- libpng reading (wip/libs-r7): png_read_info / row / image / end 0x5a5180 /
+  0x5a5440 / 0x5a5890 / 0x5a58f0 and png_read_start_row / finish_row
+  0x5b01c0 / 0x5afe20 are reimplemented with full emulator evidence but no
+  in-process test. A whole-decode test (generated PNGs, the six originals
+  reached through ScopedJumps to their trampolines) hung in the original
+  run's row phase on its first case; find out why (a jump over a Detours
+  hook into the trampoline, or the test's file) and finish it.

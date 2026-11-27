@@ -712,6 +712,16 @@ inline constexpr GameText kPngPcalDuplicate{0x7345dc};    // "Duplicate pCAL chu
 inline constexpr GameText kPngPcalInvalid{0x7345c8};      // "Invalid pCAL data"
 inline constexpr GameText kPngPcalUnknownType{0x734570};  // "Unrecognized equation type for pCAL chunk"
 inline constexpr GameText kPngPcalBadParams{0x73459c};    // "Invalid pCAL parameters for equation type"
+// libs-r7 batch: png_read_info / png_read_row / png_read_end (thirdparty/png_read.cpp).
+inline constexpr GameText kPngNotAPngFile{0x7337f4};       // "Not a PNG file"
+inline constexpr GameText kPngAsciiCorrupted{0x7337cc};    // "PNG file corrupted by ASCII conversion"
+inline constexpr GameText kPngIdatMissingIhdr{0x7337b0};   // "Missing IHDR before IDAT"
+inline constexpr GameText kPngIdatMissingPlte{0x733794};   // "Missing PLTE before IDAT"
+inline constexpr GameText kPngTooManyIdats{0x73386c};      // "Too many IDAT's found"
+inline constexpr GameText kPngInvalidRowRead{0x733848};    // "Invalid attempt to read row data"
+inline constexpr GameText kPngRowDecompressionError{0x73381c};  // "Decompression error" (png_read_row's)
+inline constexpr GameText kPngNullRowBuffer{0x733bc8};       // "NULL row buffer for row %ld, pass %d"
+inline constexpr GameText kPngDitherRowbytesZero{0x733ba4};  // "png_do_dither returned rowbytes=0"
 // ------------------------------------------------------------ wip/logic-r4 batch
 // Volker\LogicInit.cpp: the CD music (CLogicThread::PlayNextMusicTrack) and FinishGame.
 inline constexpr GameText kPlayOriginalTrack{0x730bd0};  // "xxx CDAUDIOPLAY about to play ORG track #%u"

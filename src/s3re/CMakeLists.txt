@@ -60,6 +60,9 @@ add_library(s3re SHARED
     thirdparty/png_rtran_rows.cpp
     thirdparty/png_rutil_chunks.cpp
     thirdparty/png_rutil_chunks2.cpp
+    thirdparty/png_read.cpp
+    thirdparty/paintlib2.cpp
+    thirdparty/png_rtran.cpp
     thirdparty/png_rutil_rows.cpp
     thirdparty/png_set.cpp
     thirdparty/zlib_checksums.cpp

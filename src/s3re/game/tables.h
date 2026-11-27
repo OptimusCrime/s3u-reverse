@@ -364,6 +364,26 @@ inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassYstart{0x7336a8};  /
 inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassYinc{0x7336c4};    // png_pass_yinc: row step
 inline constexpr GameGlobal<const std::uint8_t[5]> g_pngIdat{0x7335f0};        // png_IDAT: "IDAT"
 inline constexpr GameGlobal<const float> g_pngGammaScale{0x65c5c8};       // 1e-5f (png_handle_gAMA)
+// libs-r7 batch: the chunk names as png_read_info / png_read_end compare them (a dword each,
+// 8 bytes apart; png_IDAT is g_pngIdat above), the interlace masks of png_read_row.
+inline constexpr GameGlobal<const std::uint32_t> g_pngIhdrName{0x7335e8};  // "IHDR"
+inline constexpr GameGlobal<const std::uint32_t> g_pngIendName{0x7335f8};  // "IEND"
+inline constexpr GameGlobal<const std::uint32_t> g_pngPlteName{0x733600};  // "PLTE"
+inline constexpr GameGlobal<const std::uint32_t> g_pngBkgdName{0x733608};  // "bKGD"
+inline constexpr GameGlobal<const std::uint32_t> g_pngChrmName{0x733610};  // "cHRM"
+inline constexpr GameGlobal<const std::uint32_t> g_pngGamaName{0x733618};  // "gAMA"
+inline constexpr GameGlobal<const std::uint32_t> g_pngHistName{0x733620};  // "hIST"
+inline constexpr GameGlobal<const std::uint32_t> g_pngOffsName{0x733628};  // "oFFs"
+inline constexpr GameGlobal<const std::uint32_t> g_pngPcalName{0x733630};  // "pCAL"
+inline constexpr GameGlobal<const std::uint32_t> g_pngPhysName{0x733638};  // "pHYs"
+inline constexpr GameGlobal<const std::uint32_t> g_pngSbitName{0x733640};  // "sBIT"
+inline constexpr GameGlobal<const std::uint32_t> g_pngSrgbName{0x733648};  // "sRGB"
+inline constexpr GameGlobal<const std::uint32_t> g_pngTextName{0x733650};  // "tEXt"
+inline constexpr GameGlobal<const std::uint32_t> g_pngTimeName{0x733658};  // "tIME"
+inline constexpr GameGlobal<const std::uint32_t> g_pngTrnsName{0x733660};  // "tRNS"
+inline constexpr GameGlobal<const std::uint32_t> g_pngZtxtName{0x733668};  // "zTXt"
+inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassMask{0x7336e0};     // png_pass_mask: the pixels a pass fills
+inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassDspMask{0x7336fc};  // png_pass_dsp_mask: for the "rectangle" display
 // wip/logic-r4: the CD music (CLogicThread::PlayNextMusicTrack 0x53f5f0).
 // Four playlists per CD version (one per race; the Amazons' CD has four
 // tracks per list, the others three), and the playlist lengths
