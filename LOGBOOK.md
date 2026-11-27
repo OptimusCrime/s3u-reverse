@@ -13,53 +13,33 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 
 ## Current focus
 
-**Next (updated in session 57). The user's priority (2026-11-24): function
+**Next (updated in session 58). The user's priority (2026-11-24): function
 batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch. The user wants each round followed by the next right away.**
 
-**Session 57's merges and evidence are complete** (see its entry): main
-has wip/app-r4, images-r4, logic-r4, draw-r5, menus-r5 and stubs-r5.
+**Round 6 is merged and has its milestone evidence** (session 58 entry):
+main has wip/watcom-r6, png-r6 and text-r6. Their worktrees
+(`..\s3re-text-r6`, `..\s3re-watcom-r6`, `..\s3re-png-r6`, and the older
+r4/r5 ones) can be removed: delete the `Settlers3Ultimate` junction first
+(`cmd /c rmdir`), then `git worktree remove`, never `--force`.
 
-**First thing next session: merge round 6.** Three finished branches,
-pushed, not merged (each built; worktrees still exist under
-`..\s3re-text-r6`, `..\s3re-watcom-r6`, `..\s3re-png-r6`, with junctions:
-remove the junction first, never `--force`). Merge them one at a time
-(three-way per row in re/functions.csv against the merge base; a row the
-branch left at base content takes main's), then the full emulator suite
-(`--full`; all three changed emu.py) and the whole-game checks.
-- **wip/text-r6 (9de9030), 35 verified, ~14.6 KB:** Dirk::CTextSurface
-  (Lock, Unlock, DrawText, DrawTextF, AddFont, Create, DrawWideText),
-  CDrawer panel-text helpers 0x4d65e0 / 0x4d6740 / 0x4d6a30..0x4d78d0 and
-  InitPanelFonts 0x4c6f60, RenderMessageTexts / BlitMessageTexts,
-  CLandscapeSurface::BlitVisibleArea, CDrawThread::SignalFrameDone,
-  CCriticalSection Enter/Leave, CLock, CMouseSurface SetHotspot/Clear.
-  Harness: GDI/Interlocked probes, variadic hook thunk, CRT float-table
-  preset (CRT_FLOAT_CONVERSIONS). **Merge conflict to expect:** it also
-  implemented WideToNarrowString 0x60b6a0 (game/framework/wide_to_narrow.cpp),
-  which wip/menus-r5 already put on main (wide_strings.cpp): keep one
-  (compare tests/specs), make sure 0x60b6a0 is hooked once. Its full
-  `--test` timed out at 993/993 passed (~50 tests not run): rerun after
-  the merge. Next there: the panel drawer 0x4b4d00 (71 KB) and the
-  settler drawer 0x4c85a0 (38 KB) as separate batches (their helpers are
-  done now), then SetMouseCursor 0x42cb60 (catch(...) rethrow test).
-- **wip/watcom-r6 (0057607), 241 verified, 27.7 KB:** table-driven
-  template instantiations (vector ctors/dtors/copies, element-string
-  vectors, sorted/ordered finds, base_init_upto, skip lists, list
-  ctors/dtors, comparison callbacks, 24 deleting destructors), many
-  misnamed rows renamed. Full `--test` 1051/1051 at batch 3; batch 4 only
-  filtered (47/47). 0x472eb0 stays original (folded DebugLog call).
-  Left: 129 rows, mostly misnamed game/lobby functions that inline
-  vectors (rename them), plus a few iterators and copy constructors.
-  Possibly flaky: GamePlayerSetup_Assign_MatchesOriginal (heap-address
-  dependent; backlog it if it fails again).
-- **wip/png-r6 (5511c2a), 28 verified, ~15.5 KB:** the whole zlib 1.1.3
-  decoder (full-chain original-vs-ours test with a test deflate encoder),
-  png_read_filter_row / combine_row / do_read_interlace, 13 chunk
-  handlers, png_set_text, the libpng teardown. png_read_start_row /
-  finish_row reimplemented, unverified. Full `--test` 1044/1044. Left:
-  cHRM/sRGB/zTXt/pCAL handlers, gamma, read transformations,
+**Next batches (round 7):**
+- **The panel drawer 0x4b4d00 (71 KB)** and **the settler drawer 0x4c85a0
+  (38 KB)**, as separate batches; their helpers (text-r6's panel texts,
+  text surface, message texts) are done now.
+- **SetMouseCursor 0x42cb60** (needs a catch(...) rethrow test).
+- **Watcom leftovers:** 129 rows, mostly misnamed game/lobby functions that
+  inline vectors (rename them), plus a few iterators and copy constructors.
+  0x472eb0 stays original (folded DebugLog call).
+  GamePlayerSetup_Assign_MatchesOriginal is possibly flaky (heap-address
+  dependent; passed in all three session-58 runs; backlog it if it fails).
+- **PNG leftovers:** png_read_start_row / finish_row are reimplemented but
+  unverified; cHRM/sRGB/zTXt/pCAL handlers, gamma, read transformations,
   png_read_info/row/image/end, png_create_read_struct (setjmp), PaintLib
   DoDecode/MakeBmp/CFileSource (list in re/picture_code.md).
+- **CRT "platform library" status** (CLAUDE.md "Library and compiler
+  code", backlog `docs/todo/evidence.md`): the status for the CRT
+  functions the game doesn't depend on, counted apart from verified.
 
 Backlog of the rest: `TODO.md` and `docs/todo/*.md`. Session 56's
 leftover list is mostly done (LoadSaveGame, InitPlayerInfo, the tiny
@@ -143,6 +123,40 @@ testing".
   classes by default; they might be library code.
 
 ## Session log (recent sessions; older ones in docs/history/)
+
+### 2026-11-27 (58): round 6 merged, milestone evidence
+
+Merged into main, one at a time (re/functions.csv three-way per row
+against the merge base; no row was changed on both sides except
+0x60b6a0):
+- wip/watcom-r6 -> a8c84fc (241 Watcom instantiations): conflicts only in
+  the generated progress files; the build then failed on four vtable
+  constants (kWCValListBase_CScreenElementP/_bool/_MsgConsole,
+  kWCIsvSListBase_MsgConsole) that menus-r5 had already put in vtables.h
+  (same values): the branch's copies dropped. `--test` 1086/1086,
+  emutest `--changed` 395 functions, 0 mismatches.
+- wip/png-r6 -> 6437c8e (28 verified, 2 unverified): re/globals.csv both
+  sides' rows kept (no duplicate addresses). `--test` 1097/1097, emutest
+  `--changed` 78 functions, 0 mismatches.
+- wip/text-r6 -> ec7653e (34 functions): its WideToNarrowString 0x60b6a0
+  (framework/wide_to_narrow.cpp + tests + spec) duplicated main's
+  (framework/wide_strings.cpp, menus-r5; same logic, main's has the
+  emulator spec with the wcstombs probe and the self-test pairing): the
+  branch's files, CMake lines and spec dropped, main's row kept, so
+  0x60b6a0 is hooked once. specs/framework.py, re/globals.csv and
+  docs/tools/emulator.md combined. `--test` 1119/1119 (the branch's
+  earlier 992/993 did not reproduce); emutest `--changed` (harness
+  changed, so all specs, quick) 0 mismatches.
+- Milestone evidence on the merged main: full emulator suite (`--full
+  --require-coverage`, Release, 15 workers, 44 min): 12,763 functions,
+  0 mismatches, 0 incomplete coverage; `--self-test` 40/40 + RAM
+  "separate". Whole-game checks against the original (Debug): check_save
+  slots 1-3 (2,000 ticks), check_random_map 384,0 and 448,3 (1,000
+  ticks), scripted-seed127 replay (3,000 ticks): all identical; call
+  counts recorded (record_call_counts.py: 34 rows updated).
+- Numbers (progress.py): verified 12,764 functions (74.20 %), game code
+  41.1 % verified (headline), all code 48.5 % of the bytes; identical in
+  a whole-game check 11,665 functions (39.48 % of the bytes).
 
 ### 2026-11-26/27 (57): merges of rounds 4-5, static-initializer stubs, milestone evidence
 
