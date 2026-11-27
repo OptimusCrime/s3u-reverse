@@ -745,4 +745,10 @@ inline constexpr GameText kDrawNoData{0x698e7c};           // "DRAW: Kein Daten 
 inline constexpr GameText kDrawFile{0x698f1c};             // "E:\Siedler3\Dirk\Draw.cpp"
 inline constexpr GameText kGraphicsDataNotNull{0x698f0c};  // "lpGraphicsData"
 inline constexpr GameText kSoundDataNotNull{0x698f00};     // "lpSoundData"
+// CDrawer::QueueSettler 0x4c85a0's log lines (DebugLog).
+inline constexpr GameText kStandsOnLog{0x6a0000};            // "ist auf %u"
+inline constexpr GameText kSettlerTypeTodoLog{0x6a000c};     // "Art der Figur: %u   settlertodocount %u"
+inline constexpr GameText kIllegalAnimationLog{0x6a0034};    // "Illegale Animation bei Figur, Anim Nr. %u"
+inline constexpr GameText kSettlerTodoLog{0x6a0060};         // "art %u, owner %u, todo %u, todocount %u"
+inline constexpr GameText kSuspiciousTodoCountLog{0x6a0088}; // "extrem verdächtiger todocount"
 }  // namespace s3re::game::texts

@@ -1445,6 +1445,145 @@ SPECS += [
 ]
 
 
+# -- CDrawer::QueueSettler (drawer_settlers.cpp, wip/settlerdraw-r7) --------
+# Like QueueBuilding's spec: the drawer at world 0, the draw data at
+# QS_DATA. Render::Entry204 runs (pure table read, called far more often
+# by the original): the drawer's +0x204 points at QS_RACES, races 0..3 for
+# every owner byte. The animation getters are probed (they return the image
+# list at QS_LIST, lazily random but with small counts often), the frame
+# lookups run on it; GetSequenceFrame writes a frame record (images zero
+# now and then, a small sound byte often); the queue functions, palette,
+# sound calls, IsNearView and the label's text calls are probed
+# (CTextSurface::DrawTextF without its stack result buffer);
+# CDrawer::AddHitArea runs (S3.EXE globals, compared). The globals give the
+# shown settler group (its list holds the cell's settler number in some
+# cases) and the view size for the catapult's number label.
+QS_DATA = 0x100000
+QS_LIST = SCRATCH
+QS_RACES = SCRATCH + SCRATCH_SLOT_BYTES
+QS_CELLS = QS_DATA + 0x500
+QS_SPECIAL_TYPES = (0, 0, 0x17, 0x17, 0x29, 0x29, 0x29, 0x2b, 0x2b, 0x2c, 0x2c, 0x13, 0x2d, 0x10, 0x1d, 0x26, 0x27,
+                    0x14, 0x25, 0x2a, 0x30, 0xff)
+
+
+def qs_sequence_frame(m, ecx, args, h):
+    words = [(h >> (k * 7)) & 0xFFFFFFFF for k in range(5)]
+    for k in (1, 2, 3):
+        if (h >> (40 + k)) & 3 == 0:
+            words[k] = 0
+    if (h >> 50) & 1:
+        words[4] = (words[4] & 0xFFFFFF) | (((h >> 51) & 0x3F) << 24)  # a small sound threshold byte
+    m.guest_write(args[0], struct.pack("<5I", *words))
+    return args[0]
+
+
+QS_CALLEES = {
+    0x005fabb0: (2, "thiscall", "probe", qb_list_out, lambda m, ecx, a: (a[1],)),
+    0x005fab50: (2, "thiscall", "probe", qb_list_out, lambda m, ecx, a: (a[1],)),
+    0x005faaf0: (2, "thiscall", "probe", qb_list_out, lambda m, ecx, a: (a[1],)),
+    0x005fac10: (2, "thiscall", "probe"),  # CGraphicsData::PalettePointer
+    0x005fad50: (3, "thiscall", "probe", qs_sequence_frame, lambda m, ecx, a: (a[1], a[2])),
+    0x004d7c90: (4, "thiscall", "probe"),  # CDrawer::QueueShadow
+    0x004d7d50: (5, "thiscall", "probe"),  # CDrawer::QueueShadowPart
+    0x004d7e10: (5, "thiscall", "probe"),  # CDrawer::QueueSprite
+    0x004d7f30: (6, "thiscall", "probe"),  # CDrawer::QueueSpritePart
+    0x004d8170: (5, "thiscall", "probe"),  # CDrawer::QueueColourLayer
+    0x004d8050: (6, "thiscall", "probe"),  # CDrawer::QueueSpriteWithColour
+    0x004c7b50: (2, "thiscall", "probe"),  # Render::IsNearView (stdcall, ret 8)
+    0x005ff4d0: (0, "thiscall", "probe"),  # CSoundData::IsEnabled
+    0x005ff4f0: (2, "thiscall", "probe"),  # CSoundData::GetEffect (ret 8)
+    0x005c2fc0: (3, "thiscall", "probe"),  # DirectX::CSoundEffect::Play (ret 0xc)
+    0x004d65e0: (4, "thiscall", "probe"),  # CDrawer::ClearTextRect (ret 0x10)
+    0x004d6740: (4, "thiscall", "probe"),  # CDrawer::BlitTextRect (ret 0x10)
+    # Dirk::CTextSurface::DrawTextF (cdecl; this, result, font, rect, flags, format, value): the result is a
+    # stack buffer (left out)
+    0x004a87d0: (7, "cdecl", "probe", None, lambda m, ecx, a: (a[0], a[2], a[3], a[4], a[5], a[6])),
+}
+
+
+def qs_settler(args):
+    return (args[1] * 977 + args[2] * 31 + 7) & 0xFFFF
+
+
+def qs_coordinate(low, high):
+    def generate(rng, pool):
+        return (rng.randrange(low, high) if rng.random() < 0.85 else anything(rng, pool)) & 0xFFFFFFFF
+    return generate
+
+
+def qs_presets(rng, pool, args):
+    cell = QS_CELLS + (args[1] * 130 + args[2]) * 0x30
+    r = rng.random()
+    settler_type = rng.randrange(0x30) if r < 0.5 else rng.choice(QS_SPECIAL_TYPES)
+    r = rng.random()
+    if r < 0.55:
+        action = rng.randrange(6)
+    elif r < 0.8:
+        action = 0x8000 + rng.randrange(7) if settler_type == 0x29 else rng.randrange(6, 2000)
+    else:
+        action = rng.choice([6, 7, 0x7fff, 0x8006, rng.getrandbits(32)])
+    r = rng.random()
+    step = 0 if r < 0.3 else rng.randrange(1, 13) if r < 0.6 else rng.choice([13, 24, 36, 37, rng.randrange(256)])
+    steps = rng.randrange(80) if rng.random() < 0.9 else rng.choice([50000, 50001, rng.randrange(65536)])
+    good = rng.choice([0, 0, 1, 2, rng.randrange(0x24), rng.randrange(0x24), 0x23, 11, rng.randrange(256)])
+    if settler_type == 0 and rng.random() < 0.7:  # a carrier: any of its 36 goods
+        good = rng.randrange(0x24)
+    player = rng.randrange(20)
+    fields = [(QS_LIST + 7, rng.choice([0, 1, 2, 6, 40, rng.randrange(256)]), 1),
+              (QS_RACES, int.from_bytes(b"".join(struct.pack("<I", rng.randrange(4)) for _ in range(256)), "little"), 1024),
+              (0x204, WORLD_BASE + QS_RACES, 4),  # the drawer's race table (Render::Entry204)
+              (cell + 0x2a, settler_type, 1), (cell + 0x20, action, 4), (cell + 0x25, step, 1),
+              (cell + 0x26, steps, 2), (cell + 0x28, rng.randrange(1, 256), 1), (cell + 0x24, good, 1),
+              (cell + 0x29, player, 1), (cell + 0x1e, qs_settler(args), 2),
+              (QS_DATA + 0x5c, rng.choice([0xFFFFFFFF, 0, 50, 200, rng.getrandbits(32)]), 4),
+              (QS_DATA + 0x60, rng.choice([1, 1, 0, 2]), 4), (QS_DATA + 0x64, rng.randrange(2), 4),
+              (QS_DATA + 0x68, rng.randrange(2), 4),
+              (QS_DATA + 0x98, player if rng.random() < 0.6 else rng.randrange(20), 4)]
+    fields += [(QS_DATA + 0x294 + 4 * p, rng.randrange(3), 4) for p in range(20)]
+    flags = rng.choice([0, 0, rng.randrange(256), rng.randrange(256) & ~0x40, 0x40 | rng.randrange(256)])
+    fields.append((cell + 0x2c, flags, 1))
+    if rng.random() < 0.6:
+        fields.append((cell + 0x05, rng.randrange(19, 64), 1))
+    if rng.random() < 0.4:
+        fields.append((cell + 0x04, 0xff, 1))
+    if rng.random() < 0.5:
+        fields.append((cell + 0x0d, 0, 1))  # a finished ship
+    if rng.random() < 0.7:  # ship cargo: ferry passengers (count, types) or trade ship (good, units) pairs
+        if settler_type == 0x2b and rng.random() < 0.7:
+            cargo = []
+            for _ in range(4):
+                cargo += [0 if rng.random() < 0.3 else rng.randrange(36), rng.randrange(9)]
+        else:
+            cargo = [rng.randrange(9)] + [rng.choice([0, 5, 8, 15, 22, 23, 30, 36, 40, rng.randrange(48)])
+                                          for _ in range(7)]
+        fields += [(cell + 0x0e + k, value, 1) for k, value in enumerate(cargo)]
+    return fields
+
+
+def qs_globals(rng, pool, args):
+    group = rng.choice([0xFFFFFFFF, rng.randrange(10), rng.randrange(10)])
+    result = [(0x007dfd68, group, 4),  # g_currentSettlerGroup
+              (0x00730f3c, rng.choice([0, 0, 100]), 4),  # g_drawOriginX
+              (0x00730f0c, rng.choice([640, 800, 1024]), 4),  # g_displayWidth
+              (0x00730f10, rng.choice([480, 600, 768]), 4)]  # g_displayHeight
+    if group != 0xFFFFFFFF:
+        count = rng.choice([0, 1, 5, 99])
+        result.append((0x007ad620 + 2 * group, count, 2))  # g_settlerGroups.counts
+        if count and rng.random() < 0.7:
+            result.append((0x007ad634 + 200 * group + 2 * rng.randrange(count), qs_settler(args), 2))
+    return result
+
+
+SPECS += [
+    Spec("CDrawer_QueueSettler", 0x004c85a0, "thiscall",
+         [one_of(WORLD_BASE + QS_DATA), below(130), below(130), qs_coordinate(-50, 1100), qs_coordinate(-50, 900)],
+         presets=qs_presets, globals=qs_globals, callees=QS_CALLEES, eax_mask=0, case_scale=4,
+         # 0x4d0a05: the construction divisor of a ship that is neither type 0x2b nor 0x2c (an uninitialized
+         # stack value); only those two types reach the ship code
+         exempt_blocks=(0x4d0a05,)),
+]
+
+
 # -- Dirk::CTextSurface (text_surface.cpp, wip/text-r6) ---------------------
 # The surface at world 0. The GDI calls are API probes (CreateCompatibleDC,
 # SelectObject, SetBkMode, SetBkColor, SetTextColor, DrawTextA, DeleteDC,

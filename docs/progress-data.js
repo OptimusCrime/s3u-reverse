@@ -5962,7 +5962,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-27","statuses":["unknown","classifi
 [5014880,32,6,0,"StaticInit_7aa600"],
 [5014912,16,6,0,"StaticDtorReg_7aa600"],
 [5014928,16,6,0,"StaticDtor_7aa600"],
-[5014944,38544,1,69,"Render_sub_4c85a0"],
+[5014944,38544,4,94,"CDrawer::QueueSettler","Queues the settler of a draw cell."],
 [5053488,16,6,0,"StaticInitEntry_7aa8b0"],
 [5053504,32,6,0,"StaticInit_7aa8b0"],
 [5053536,16,6,0,"StaticDtorReg_7aa8b0"],
@@ -21707,6 +21707,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-27","statuses":["unknown","classifi
 [5014880,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5014912,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5014928,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
+[5014944,null,{},[]],
 [5053488,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5053504,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5053536,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
@@ -30904,4 +30905,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-27","statuses":["unknown","classifi
 ["2026-11-27","a8c84fc",12702,1055376,1442865,876778,11606],
 ["2026-11-27","6437c8e",12730,1080320,1442865,876778,11606],
 ["2026-11-27","ec7653e",12764,1094144,1456289,876778,11606],
-["2026-11-27","9b81abf",12764,1094144,1456289,891642,11665]]};
+["2026-11-27","0f3f534",12750,1081869,1443855,876778,11606],
+["2026-11-27","a40ffeb",12757,1082989,1444575,876778,11606],
+["2026-11-27","9b81abf",12764,1094144,1456289,891642,11665],
+["2026-11-27","ef65f96",12791,1096813,1457999,891642,11665]]};

@@ -39,6 +39,15 @@ struct ShipyardInputs {
 };
 static_assert(sizeof(ShipyardInputs) == 0x10);
 
+// A place on a ship (g_ferrySeats, g_cargoPlaces): pixel offset and the
+// drawing order it is matched by.
+struct ShipPlace {
+    std::int32_t dx;
+    std::int32_t dy;
+    std::uint32_t order;
+};
+static_assert(sizeof(ShipPlace) == 12);
+
 // Pixel offset of a soldier's place in a tower (g_towerSlotOffsets).
 struct TowerSlotOffset {
     std::int32_t x;
@@ -269,6 +278,20 @@ inline constexpr GameGlobal<const std::uint32_t[7]> g_objectF7Animations{0x6a35f
 // 15..17 the same for 0xfe; other slots: the selection sprites of
 // QueueLandscapeObject, settlers (0x4c85a0), buildings (0x4a9960).
 inline constexpr GameGlobal<const std::uint32_t[][4]> g_raceAnimations{0x6a3b38};
+
+// Ships (CDrawer::QueueSettler 0x4c85a0): the places of a ferry's
+// passengers (per race, ship direction, seat from the last of
+// g_raceShipCapacity's seats; `order` 1..10 the ones behind the hull,
+// 0x81.. the ones in front) and of a trade ship's cargo piles (per race and
+// direction, 4 places, g_table659654 of them used).
+inline constexpr GameGlobal<const ShipPlace[]> g_ferrySeats{0x6a0a5c};
+inline constexpr GameGlobal<const ShipPlace[]> g_cargoPlaces{0x6a05dc};
+// The g_raceAnimations slot of a ferry passenger per settler type (0: not
+// drawn; +1 colour layer, +2 sprite).
+inline constexpr GameGlobal<const std::uint32_t[48]> g_ferryPassengerSlots{0x6a051c};
+// The animation of a trade ship's cargo pile per good and race
+// ([good][race]; the rows are 8 dwords, the second half unused here).
+inline constexpr GameGlobal<const std::uint32_t[][8]> g_cargoAnimations{0x6a36c8};
 
 // Buildings of the draw cells (CDrawer::QueueBuilding 0x4a9960):
 // the worker animation's position {dx, dy} per race + type * 4;
