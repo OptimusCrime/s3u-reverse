@@ -23,6 +23,9 @@
 // operator delete's, or 0 without a block. Four copies of the same code:
 //   0x00409d50 WCValOrderedVector<String>  0x0044c980 WCValSortedVector<String>
 //   0x0040a280, 0x0044cf50 (WCBareVectorBase<String> bodies, callers' classes not named)
+//   and (wip/watcom-r6) 0x005df310 (the same bytes) and 0x00414770 (11
+//   callers; its ~string has the buffer split inlined too); 0x004583d0
+//   destroys such a vector at +4 of its object.
 //
 // WCValOrderedVector<String>::insertAt (0x004148a0; 18 callers):
 //   (index, const String* value) ret 8. The index is clamped to 0..length.
@@ -137,6 +140,22 @@ std::uint32_t __fastcall StringVectorDestructor_40a280(VectorBase* self, void*) 
 std::uint32_t __fastcall StringVectorDestructor_44cf50(VectorBase* self, void*) {
     return DestroyStringVector(self);
 }
+std::uint32_t __fastcall StringVectorDestructor_5df310(VectorBase* self, void*) {
+    return DestroyStringVector(self);
+}
+std::uint32_t __fastcall StringVectorDestructor_414770(VectorBase* self, void*) {
+    return DestroyStringVector(self);
+}
+// (0x4583d0 destroys the vector at +4 of its object: an object's member
+// destructor that is only this.)
+std::uint32_t __fastcall StringVectorDestructor_4583d0(VectorBase* self, void*) {
+    return DestroyStringVector(reinterpret_cast<VectorBase*>(reinterpret_cast<std::uintptr_t>(self) + 4));
+}
+// (0x459550 is the same for the menus' dictionary pairs <key, vector of
+// strings>: the pair's destructor, the value at +4.)
+std::uint32_t __fastcall StringVectorDestructor_459550(VectorBase* self, void*) {
+    return DestroyStringVector(reinterpret_cast<VectorBase*>(reinterpret_cast<std::uintptr_t>(self) + 4));
+}
 
 using StringInsertAtFn = std::uint32_t(__fastcall*)(PtrVector* self, void* edx, std::int32_t index,
                                                     const String* value);
@@ -224,7 +243,8 @@ using StringVectorCopyFn = VectorBase*(__fastcall*)(VectorBase* self, void* edx,
 
 // Purpose: Copy constructor of a vector of strings (the console's command
 // list, the lobby's chat lines).
-VectorBase* __fastcall StringVector_CopyConstruct(VectorBase* self, void* /*edx*/, const VectorBase* from) {
+namespace {
+VectorBase* CopyStrings(VectorBase* self, const VectorBase* from) {
     return CopyVector(self, from, game::vtables::kWCValOrderedVector_String, sizeof(String),
                       [](std::int32_t index, std::uint32_t to, std::uint32_t source) {
                           auto* string = reinterpret_cast<String*>(to);
@@ -234,7 +254,35 @@ VectorBase* __fastcall StringVector_CopyConstruct(VectorBase* self, void* /*edx*
                                                      0xFFFFFFFFu);
                       });
 }
+}  // namespace
 
+VectorBase* __fastcall StringVector_CopyConstruct(VectorBase* self, void* /*edx*/, const VectorBase* from) {
+    return CopyStrings(self, from);
+}
+
+#pragma pack(push, 1)
+struct KeyedStringVector {  // WCSkipListDictKeyVal<unsigned int, WCValOrderedVector<String>>
+    std::uint32_t key;
+    VectorBase value;
+};
+#pragma pack(pop)
+static_assert(sizeof(KeyedStringVector) == 0x20);
+
+using KeyedCopyFn = KeyedStringVector*(__fastcall*)(KeyedStringVector* self, void* edx, const std::uint32_t* key,
+                                                    const VectorBase* value);
+
+// Purpose: Constructor of the menus' dictionary pairs of a key and a vector
+// of strings (copies both; the vector as the copy constructor above, whose
+// loop counter again gives each string's allocator byte).
+KeyedStringVector* __fastcall KeyedStringVector_Construct(KeyedStringVector* self, void* /*edx*/,
+                                                          const std::uint32_t* key, const VectorBase* value) {
+    self->key = *key;
+    CopyStrings(&self->value, value);
+    return self;
+}
+
+S3RE_HOOK(0x004582b0, KeyedStringVector_Construct, KeyedCopyFn, Original_KeyedStringVector_Construct,
+          KeyedStringVector_Construct);
 S3RE_HOOK(0x00409c40, StringVector_CopyConstruct, StringVectorCopyFn, Original_StringVector_CopyConstruct,
           StringVector_CopyConstruct);
 S3RE_HOOK(0x004148a0, StringVector_InsertAt, StringInsertAtFn, Original_StringVector_InsertAt,
@@ -250,6 +298,14 @@ S3RE_HOOK(0x0040a280, StringVectorDestructor_40a280, StringVectorDestructorFn,
           Original_StringVectorDestructor_40a280, StringVectorDestructor_40a280);
 S3RE_HOOK(0x0044cf50, StringVectorDestructor_44cf50, StringVectorDestructorFn,
           Original_StringVectorDestructor_44cf50, StringVectorDestructor_44cf50);
+S3RE_HOOK(0x005df310, StringVectorDestructor_5df310, StringVectorDestructorFn,
+          Original_StringVectorDestructor_5df310, StringVectorDestructor_5df310);
+S3RE_HOOK(0x00414770, StringVectorDestructor_414770, StringVectorDestructorFn,
+          Original_StringVectorDestructor_414770, StringVectorDestructor_414770);
+S3RE_HOOK(0x004583d0, StringVectorDestructor_4583d0, StringVectorDestructorFn,
+          Original_StringVectorDestructor_4583d0, StringVectorDestructor_4583d0);
+S3RE_HOOK(0x00459550, StringVectorDestructor_459550, StringVectorDestructorFn,
+          Original_StringVectorDestructor_459550, StringVectorDestructor_459550);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -515,7 +571,11 @@ std::uint32_t __fastcall WrongInsertAt(PtrVector* self, void* edx, std::int32_t 
 // The copy constructor on Build's vectors (sometimes capacity <= 0 or a
 // failing size); compared: EAX, the new vector's fields (data only as null
 // or not) and strings, and the source (its buffers' counts).
-void CompareCopy(test::Context& ctx, StringVectorCopyFn candidate, int cases) {
+void CompareCopy(test::Context& ctx, StringVectorCopyFn candidate, int cases,
+                 StringVectorCopyFn original = nullptr) {
+    if (original == nullptr) {
+        original = Original_StringVector_CopyConstruct;
+    }
     char text[48];
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t count = ctx.rng().Below(7);
@@ -543,7 +603,7 @@ void CompareCopy(test::Context& ctx, StringVectorCopyFn candidate, int cases) {
         VectorBase da{}, db{};
         ctx.rng().Fill(&da, sizeof(da));
         std::memcpy(&db, &da, sizeof(db));
-        VectorBase* ra = Original_StringVector_CopyConstruct(&da, nullptr, reinterpret_cast<VectorBase*>(&sa));
+        VectorBase* ra = original(&da, nullptr, reinterpret_cast<VectorBase*>(&sa));
         VectorBase* rb = candidate(&db, nullptr, reinterpret_cast<VectorBase*>(&sb));
         bool same = S3RE_EXPECT(ra == &da && rb == &db) && SameVectors(ctx, sa.vector, sb.vector);
         if (same && da.data == 0) {  // (no strings to compare)
@@ -560,6 +620,26 @@ void CompareCopy(test::Context& ctx, StringVectorCopyFn candidate, int cases) {
 }
 
 // Wrong: the copies' allocator bytes 0.
+// 0x4582b0 on the same vectors: the pair built around the destination
+// (its key from a fixed word; a wrong key copy returns null).
+constexpr std::uint32_t kPairKey = 0x6b657931;
+template <KeyedCopyFn* Fn>
+VectorBase* __fastcall KeyedCopyOn(VectorBase* to, void*, const VectorBase* from) {
+    KeyedStringVector pair;
+    pair.key = ~kPairKey;
+    pair.value = *to;
+    KeyedStringVector* result = (*Fn)(&pair, nullptr, &kPairKey, from);
+    *to = pair.value;
+    return result == &pair && pair.key == kPairKey ? to : nullptr;
+}
+KeyedCopyFn g_ourKeyedCopy = &KeyedStringVector_Construct;
+// Wrong: the key not copied.
+KeyedStringVector* __fastcall WrongKeyedCopy(KeyedStringVector* self, void*, const std::uint32_t*, const VectorBase* value) {
+    StringVector_CopyConstruct(&self->value, nullptr, value);
+    return self;
+}
+KeyedCopyFn g_wrongKeyedCopy = &WrongKeyedCopy;
+
 VectorBase* __fastcall WrongCopy(VectorBase* self, void* edx, const VectorBase* from) {
     StringVector_CopyConstruct(self, edx, from);
     for (std::int32_t i = 0; self->data != 0 && i < self->filled; ++i) {
@@ -592,17 +672,50 @@ S3RE_TEST(StringVector_CopyConstruct_MatchesOriginal) {
     CompareCopy(ctx, &StringVector_CopyConstruct, 2000);
 }
 
+S3RE_TEST(KeyedStringVector_Construct_MatchesOriginal) {
+    CompareCopy(ctx, &KeyedCopyOn<&g_ourKeyedCopy>, 1000, &KeyedCopyOn<&Original_KeyedStringVector_Construct>);
+}
+
+S3RE_TEST(KeyedStringVector_Construct_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareCopy(probe, &KeyedCopyOn<&g_wrongKeyedCopy>, 20, &KeyedCopyOn<&Original_KeyedStringVector_Construct>);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 S3RE_TEST(StringVector_CopyConstruct_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareCopy(probe, &WrongCopy, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+namespace {
+// 0x4583d0 gets the object whose +4 is the vector.
+VectorBase* OwnerOf(VectorBase* vector) {
+    return reinterpret_cast<VectorBase*>(reinterpret_cast<std::uintptr_t>(vector) - 4);
+}
+std::uint32_t __fastcall Original4583d0OnVector(VectorBase* vector, void*) {
+    return Original_StringVectorDestructor_4583d0(OwnerOf(vector), nullptr);
+}
+std::uint32_t __fastcall Ours4583d0OnVector(VectorBase* vector, void*) {
+    return StringVectorDestructor_4583d0(OwnerOf(vector), nullptr);
+}
+std::uint32_t __fastcall Original459550OnVector(VectorBase* vector, void*) {
+    return Original_StringVectorDestructor_459550(OwnerOf(vector), nullptr);
+}
+std::uint32_t __fastcall Ours459550OnVector(VectorBase* vector, void*) {
+    return StringVectorDestructor_459550(OwnerOf(vector), nullptr);
+}
+}  // namespace
+
 S3RE_TEST(StringVectorDestructors_MatchOriginal) {
     CompareDestructor(ctx, Original_StringVectorDestructor_409d50, &StringVectorDestructor_409d50, 1000);
     CompareDestructor(ctx, Original_StringVectorDestructor_44c980, &StringVectorDestructor_44c980, 1000);
     CompareDestructor(ctx, Original_StringVectorDestructor_40a280, &StringVectorDestructor_40a280, 1000);
     CompareDestructor(ctx, Original_StringVectorDestructor_44cf50, &StringVectorDestructor_44cf50, 1000);
+    CompareDestructor(ctx, Original_StringVectorDestructor_5df310, &StringVectorDestructor_5df310, 1000);
+    CompareDestructor(ctx, Original_StringVectorDestructor_414770, &StringVectorDestructor_414770, 1000);
+    CompareDestructor(ctx, &Original4583d0OnVector, &Ours4583d0OnVector, 1000);
+    CompareDestructor(ctx, &Original459550OnVector, &Ours459550OnVector, 1000);
 }
 
 S3RE_TEST(StringVectorDestructors_ComparisonDetectsWrongImplementation) {

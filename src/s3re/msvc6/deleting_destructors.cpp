@@ -164,6 +164,32 @@
 //     0x004a7840 plain Dirk::CTextSurface                                           0x4a7860
 //     0x004a8e70 plain WCValSkipListDict_int_HFONT                                  0x4a8e10
 //     0x004a8e90 plain WCSkipListBase_WCSkipListDictKeyVal_int_HFONT                0x4a8eb0
+// wip/watcom-r6: the Watcom containers' others (plain; most are the lobby's
+// and the network's):
+//     0x0044cd30 plain WCValSortedVector_LobbyClient_CPlayer                        0x44c4e0
+//     0x0044cd50 plain WCValSortedVector_LobbyClient_CGroup                         0x44c580
+//     0x0044cdb0 plain WCValOrderedVector_LobbyClient_CPrivateChat                  0x44cb20
+//     0x0044cdd0 plain WCValOrderedVector_LobbyClient_CChatMessage                  0x44cbe0
+//     0x00462c30 plain WCValSortedVector_DirectX_CRunningSession                    0x4629a0
+//     0x00468310 plain WCValOrderedVector_DirectX_CConnectionShortcut               0x4627b0
+//     0x004724a0 plain WCValSkipListDict_unsigned_long_WCPtrSortedVector_CExecuteType 0x472060
+//     0x004724c0 plain WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_WCPtrSortedVector_CExecuteType 0x472120
+//     0x00472560 plain WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo        0x472580
+//     0x004725e0 plain WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo 0x472600
+//     0x005416f0 plain WCValSortedVector_Lobby_CGamePlayerStatus                    0x541690
+//     0x005bdc50 plain WCValSortedVector_DirectX_CGameNetSession_CPlayerIndex       0x5bdbd0
+//     0x005ddcd0 plain WCValOrderedVector_Lobby_CImageDescription                   0x5dd760
+//     0x005ddcf0 plain WCValOrderedVector_Lobby_CSocketAddress                      0x5dd8a0
+//     0x005ddd10 plain WCValOrderedVector_Lobby_CLMLobbyServerList_CServerData      0x5dd9c0
+//     0x005ddd30 plain WCQueue_LobbyClient_CStatusMessage_WCValSList_LobbyClient_CStatusMessage 0x5ddaf0
+//     0x005ddd50 plain WCValSList_LobbyClient_CStatusMessage                        0x5ddd70
+//     0x005ddde0 plain WCValSortedVector_LobbyClient_priv_CLobbyServer              0x5ddba0
+//     0x005f3f20 plain WCPtrSortedVector_Lobby_CSocketAddress                       0x5f3de0
+//     0x00609db0 plain WCValOrderedVector_Lobby_CLMGeneric                          0x609940
+//     0x00609dd0 plain WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock         0x609aa0
+//     0x00609df0 plain WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock 0x609bb0
+//     0x00609e10 plain WCValOrderedVector_Lobby_priv_CPlayerIndex                   0x609c40
+//     0x00609e30 plain WCValOrderedVector_Lobby_CLMMessageBlock                     0x609d10
 
 #include "game/vtables.h"
 #include "hooks.h"
@@ -751,6 +777,81 @@ std::uint32_t __fastcall CompleteDestructor_486930(std::uintptr_t self, void*) {
     return VirtualBaseDestructor(0x0042b100, 0x224, self);  // CUpDown
 }
 
+// Purpose: The same for the Watcom containers of the lobby, the network
+// and the display code (wip/watcom-r6).
+std::uintptr_t __fastcall ScalarDeletingDestructor_44cd30(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x0044c4e0, self, flags);  // WCValSortedVector_LobbyClient_CPlayer
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_44cd50(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x0044c580, self, flags);  // WCValSortedVector_LobbyClient_CGroup
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_44cdb0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x0044cb20, self, flags);  // WCValOrderedVector_LobbyClient_CPrivateChat
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_44cdd0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x0044cbe0, self, flags);  // WCValOrderedVector_LobbyClient_CChatMessage
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_462c30(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x004629a0, self, flags);  // WCValSortedVector_DirectX_CRunningSession
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_468310(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x004627b0, self, flags);  // WCValOrderedVector_DirectX_CConnectionShortcut
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_4724a0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00472060, self, flags);  // WCValSkipListDict_unsigned_long_WCPtrSortedVector_CExecuteType
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_4724c0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00472120, self, flags);  // WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_WCPtrSortedVector_CExecuteType
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_472560(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00472580, self, flags);  // WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_4725e0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00472600, self, flags);  // WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5416f0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00541690, self, flags);  // WCValSortedVector_Lobby_CGamePlayerStatus
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5bdc50(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005bdbd0, self, flags);  // WCValSortedVector_DirectX_CGameNetSession_CPlayerIndex
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5ddcd0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005dd760, self, flags);  // WCValOrderedVector_Lobby_CImageDescription
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5ddcf0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005dd8a0, self, flags);  // WCValOrderedVector_Lobby_CSocketAddress
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5ddd10(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005dd9c0, self, flags);  // WCValOrderedVector_Lobby_CLMLobbyServerList_CServerData
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5ddd30(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005ddaf0, self, flags);  // WCQueue_LobbyClient_CStatusMessage_WCValSList_LobbyClient_CStatusMessage
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5ddd50(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005ddd70, self, flags);  // WCValSList_LobbyClient_CStatusMessage
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5ddde0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005ddba0, self, flags);  // WCValSortedVector_LobbyClient_priv_CLobbyServer
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5f3f20(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005f3de0, self, flags);  // WCPtrSortedVector_Lobby_CSocketAddress
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_609db0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00609940, self, flags);  // WCValOrderedVector_Lobby_CLMGeneric
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_609dd0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00609aa0, self, flags);  // WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_609df0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00609bb0, self, flags);  // WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_609e10(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00609c40, self, flags);  // WCValOrderedVector_Lobby_priv_CPlayerIndex
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_609e30(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00609d10, self, flags);  // WCValOrderedVector_Lobby_CLMMessageBlock
+}
+
 S3RE_HOOK(0x0044e300, ScalarDeletingDestructor_44e300, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_44e300, ScalarDeletingDestructor_44e300);
 S3RE_HOOK(0x0044e320, ScalarDeletingDestructor_44e320, DeletingDestructorFn,
@@ -1083,6 +1184,54 @@ S3RE_HOOK(0x0060cf70, ScalarDeletingDestructor_60cf70, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_60cf70, ScalarDeletingDestructor_60cf70);
 S3RE_HOOK(0x0060dfc0, ScalarDeletingDestructor_60dfc0, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_60dfc0, ScalarDeletingDestructor_60dfc0);
+S3RE_HOOK(0x0044cd30, ScalarDeletingDestructor_44cd30, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_44cd30, ScalarDeletingDestructor_44cd30);
+S3RE_HOOK(0x0044cd50, ScalarDeletingDestructor_44cd50, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_44cd50, ScalarDeletingDestructor_44cd50);
+S3RE_HOOK(0x0044cdb0, ScalarDeletingDestructor_44cdb0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_44cdb0, ScalarDeletingDestructor_44cdb0);
+S3RE_HOOK(0x0044cdd0, ScalarDeletingDestructor_44cdd0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_44cdd0, ScalarDeletingDestructor_44cdd0);
+S3RE_HOOK(0x00462c30, ScalarDeletingDestructor_462c30, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_462c30, ScalarDeletingDestructor_462c30);
+S3RE_HOOK(0x00468310, ScalarDeletingDestructor_468310, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_468310, ScalarDeletingDestructor_468310);
+S3RE_HOOK(0x004724a0, ScalarDeletingDestructor_4724a0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_4724a0, ScalarDeletingDestructor_4724a0);
+S3RE_HOOK(0x004724c0, ScalarDeletingDestructor_4724c0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_4724c0, ScalarDeletingDestructor_4724c0);
+S3RE_HOOK(0x00472560, ScalarDeletingDestructor_472560, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_472560, ScalarDeletingDestructor_472560);
+S3RE_HOOK(0x004725e0, ScalarDeletingDestructor_4725e0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_4725e0, ScalarDeletingDestructor_4725e0);
+S3RE_HOOK(0x005416f0, ScalarDeletingDestructor_5416f0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5416f0, ScalarDeletingDestructor_5416f0);
+S3RE_HOOK(0x005bdc50, ScalarDeletingDestructor_5bdc50, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5bdc50, ScalarDeletingDestructor_5bdc50);
+S3RE_HOOK(0x005ddcd0, ScalarDeletingDestructor_5ddcd0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5ddcd0, ScalarDeletingDestructor_5ddcd0);
+S3RE_HOOK(0x005ddcf0, ScalarDeletingDestructor_5ddcf0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5ddcf0, ScalarDeletingDestructor_5ddcf0);
+S3RE_HOOK(0x005ddd10, ScalarDeletingDestructor_5ddd10, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5ddd10, ScalarDeletingDestructor_5ddd10);
+S3RE_HOOK(0x005ddd30, ScalarDeletingDestructor_5ddd30, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5ddd30, ScalarDeletingDestructor_5ddd30);
+S3RE_HOOK(0x005ddd50, ScalarDeletingDestructor_5ddd50, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5ddd50, ScalarDeletingDestructor_5ddd50);
+S3RE_HOOK(0x005ddde0, ScalarDeletingDestructor_5ddde0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5ddde0, ScalarDeletingDestructor_5ddde0);
+S3RE_HOOK(0x005f3f20, ScalarDeletingDestructor_5f3f20, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5f3f20, ScalarDeletingDestructor_5f3f20);
+S3RE_HOOK(0x00609db0, ScalarDeletingDestructor_609db0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_609db0, ScalarDeletingDestructor_609db0);
+S3RE_HOOK(0x00609dd0, ScalarDeletingDestructor_609dd0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_609dd0, ScalarDeletingDestructor_609dd0);
+S3RE_HOOK(0x00609df0, ScalarDeletingDestructor_609df0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_609df0, ScalarDeletingDestructor_609df0);
+S3RE_HOOK(0x00609e10, ScalarDeletingDestructor_609e10, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_609e10, ScalarDeletingDestructor_609e10);
+S3RE_HOOK(0x00609e30, ScalarDeletingDestructor_609e30, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_609e30, ScalarDeletingDestructor_609e30);
 
 // ---------------------------------------------------------------------------
 // Tests: each destructor with its callees (the class destructors and
@@ -1105,6 +1254,30 @@ struct DeletingCase {
 };
 
 const DeletingCase kDeletingCases[] = {
+    {Original_ScalarDeletingDestructor_44cd30, &ScalarDeletingDestructor_44cd30, 0x0044c4e0, 0},
+    {Original_ScalarDeletingDestructor_44cd50, &ScalarDeletingDestructor_44cd50, 0x0044c580, 0},
+    {Original_ScalarDeletingDestructor_44cdb0, &ScalarDeletingDestructor_44cdb0, 0x0044cb20, 0},
+    {Original_ScalarDeletingDestructor_44cdd0, &ScalarDeletingDestructor_44cdd0, 0x0044cbe0, 0},
+    {Original_ScalarDeletingDestructor_462c30, &ScalarDeletingDestructor_462c30, 0x004629a0, 0},
+    {Original_ScalarDeletingDestructor_468310, &ScalarDeletingDestructor_468310, 0x004627b0, 0},
+    {Original_ScalarDeletingDestructor_4724a0, &ScalarDeletingDestructor_4724a0, 0x00472060, 0},
+    {Original_ScalarDeletingDestructor_4724c0, &ScalarDeletingDestructor_4724c0, 0x00472120, 0},
+    {Original_ScalarDeletingDestructor_472560, &ScalarDeletingDestructor_472560, 0x00472580, 0},
+    {Original_ScalarDeletingDestructor_4725e0, &ScalarDeletingDestructor_4725e0, 0x00472600, 0},
+    {Original_ScalarDeletingDestructor_5416f0, &ScalarDeletingDestructor_5416f0, 0x00541690, 0},
+    {Original_ScalarDeletingDestructor_5bdc50, &ScalarDeletingDestructor_5bdc50, 0x005bdbd0, 0},
+    {Original_ScalarDeletingDestructor_5ddcd0, &ScalarDeletingDestructor_5ddcd0, 0x005dd760, 0},
+    {Original_ScalarDeletingDestructor_5ddcf0, &ScalarDeletingDestructor_5ddcf0, 0x005dd8a0, 0},
+    {Original_ScalarDeletingDestructor_5ddd10, &ScalarDeletingDestructor_5ddd10, 0x005dd9c0, 0},
+    {Original_ScalarDeletingDestructor_5ddd30, &ScalarDeletingDestructor_5ddd30, 0x005ddaf0, 0},
+    {Original_ScalarDeletingDestructor_5ddd50, &ScalarDeletingDestructor_5ddd50, 0x005ddd70, 0},
+    {Original_ScalarDeletingDestructor_5ddde0, &ScalarDeletingDestructor_5ddde0, 0x005ddba0, 0},
+    {Original_ScalarDeletingDestructor_5f3f20, &ScalarDeletingDestructor_5f3f20, 0x005f3de0, 0},
+    {Original_ScalarDeletingDestructor_609db0, &ScalarDeletingDestructor_609db0, 0x00609940, 0},
+    {Original_ScalarDeletingDestructor_609dd0, &ScalarDeletingDestructor_609dd0, 0x00609aa0, 0},
+    {Original_ScalarDeletingDestructor_609df0, &ScalarDeletingDestructor_609df0, 0x00609bb0, 0},
+    {Original_ScalarDeletingDestructor_609e10, &ScalarDeletingDestructor_609e10, 0x00609c40, 0},
+    {Original_ScalarDeletingDestructor_609e30, &ScalarDeletingDestructor_609e30, 0x00609d10, 0},
     {Original_ScalarDeletingDestructor_44e300, &ScalarDeletingDestructor_44e300, 0x00401b60, 0},
     {Original_ScalarDeletingDestructor_44e320, &ScalarDeletingDestructor_44e320, 0x00441740, 0},
     {Original_ScalarDeletingDestructor_4639c0, &ScalarDeletingDestructor_4639c0, 0x0045f060, 0},
@@ -1316,6 +1489,8 @@ void InstallStubs(test::CalleeStubs& stubs, std::uintptr_t callee) {
                     0x00612d80, 0x00613340, 0x00613bd0, 0x00612c80, 0x00615170, 0x00600400>(stubs, callee);
     // wip/app-r4: the framework classes' destructors
     InstallMatching<0x005b5d30, 0x005b6d70, 0x005b7950, 0x005b79c0, 0x005b7a30, 0x005b7ac0, 0x005b7c10, 0x005b7d90, 0x005b7e50, 0x005b8460, 0x005b7670, 0x006100c0, 0x005b9e40, 0x005befd0, 0x005ba1c0, 0x00423a10, 0x0060beb0, 0x0060f9a0, 0x0060fe90, 0x00612060, 0x00615500, 0x00616050, 0x00616150, 0x00616320, 0x00616490, 0x00619600, 0x0061aab0, 0x005b60a0, 0x005b65a0, 0x0060bfe0, 0x0060c790, 0x0060cfa0, 0x0060dff0>(stubs, callee);
+    // wip/watcom-r6: the Watcom containers' destructors
+    InstallMatching<0x0044c4e0, 0x0044c580, 0x0044cb20, 0x0044cbe0, 0x004629a0, 0x004627b0, 0x00472060, 0x00472120, 0x00472580, 0x00472600, 0x00541690, 0x005bdbd0, 0x005dd760, 0x005dd8a0, 0x005dd9c0, 0x005ddaf0, 0x005ddd70, 0x005ddba0, 0x005f3de0, 0x00609940, 0x00609aa0, 0x00609bb0, 0x00609c40, 0x00609d10>(stubs, callee);
     stubs.Install<0, kScreenElementDestructor>(
         [](game::CGameData*, std::uint32_t self, const std::uint32_t*) { return self * 7 + 1; });
 }

@@ -7,6 +7,36 @@
 //   0x00437550 WCValSortedVector<Dirk::CTeam> slot 4: a->operator<(b)
 //              (Dirk::CTeam::operator< 0x4a05a0)
 //   0x0044c4a0 a lobby vector's slot 2: Lobby::EqualField4 0x606ac0
+// More of the same (wip/watcom-r6), a->member(b) with AL zero-extended:
+//   0x0044cb00 WCValOrderedVector<LobbyClient::CPrivateChat> slot 2: 0x5dc780
+//   0x0044cbc0 WCValOrderedVector<LobbyClient::CChatMessage> slot 2: 0x5dc460
+//   0x00462960 WCValSortedVector<DirectX::CRunningSession> slot 2: 0x5bb340
+//   0x00462980 WCValSortedVector<DirectX::CRunningSession> slot 4: 0x5bb3a0
+//   0x004682f0 WCValOrderedVector<DirectX::CConnectionShortcut> slot 2: 0x5ba970
+//   0x00541650 WCValSortedVector<Lobby::CGamePlayerStatus> slot 2: 0x5ec200
+//   0x00541670 WCValSortedVector<Lobby::CGamePlayerStatus> slot 4: 0x5ec250
+//   0x005b7aa0 WCValOrderedVector<DirectX::CDirectDrawDevice> slot 2 (IsEqual): 0x5b69c0
+//   0x005b7bf0 WCValOrderedVector<DirectX::CDisplayMode> slot 2 (IsEqual): 0x5b6c60
+//   0x005bdbb0 WCValSortedVector<DirectX::CGameNetSession::CPlayerIndex> slot 4: 0x5bd260
+//   0x005dd740 WCValOrderedVector<Lobby::CImageDescription> slot 2: 0x5ebfd0
+//   0x005dd880 WCValOrderedVector<Lobby::CSocketAddress> slot 2: 0x5ed220
+//   0x005ddb80 WCValSortedVector<LobbyClient::priv::CLobbyServer> slot 4: 0x5c4830
+//   0x00609920 WCValOrderedVector<Lobby::CLMGeneric> slot 2 (Equal): 0x6027d0
+// The pointer vectors' callbacks get pointers to the elements (pointers)
+// and call the member on what they point to, (*a)->member(*b); EAX as the
+// member returns it:
+//   0x00472180 WCPtrSortedVector<CExecuteType> slot 2: 0x49d990
+//   0x004721a0 WCPtrSortedVector<CExecuteType> slot 4: 0x49d9c0
+//   0x00472220 WCPtrOrderedVector<CRequestType> slot 2: 0x49d7f0
+//   0x004722a0 WCPtrSortedVector<CAnnounceType> slot 2: 0x49d940
+//   0x004722c0 WCPtrSortedVector<CAnnounceType> slot 4: 0x49d900
+//   0x00472340 WCPtrOrderedVector<CAcknowledgeType> slot 2: 0x49d9f0
+//   0x005b7930 WCPtrSList<DirectX::CGameThread> base_equivalent (Win32::CThread::operator==): 0x60ec00
+// the same with AL zero-extended:
+//   0x00462ac0 WCPtrSortedVector<DirectX::CPlayer> slot 2: 0x5c0f80
+//   0x00462ae0 WCPtrSortedVector<DirectX::CPlayer> slot 4: 0x5c0fa0
+//   0x005f3da0 WCPtrSortedVector<Lobby::CSocketAddress> slot 2: 0x5ed220
+//   0x005f3dc0 WCPtrSortedVector<Lobby::CSocketAddress> slot 4: 0x5ed3e0
 // Callbacks with the element comparison inlined (EAX = 0 or 1):
 //   0x00462850 WCValOrderedVector<unsigned short> slot 2: *a == *b (16 bits)
 //   0x0044c910 WCValSortedVector<String> slot 4: a < b (the strings' bytes
@@ -24,6 +54,16 @@
 //   0x004a6b00 WCValSkipListDict<unsigned int, ...> base_equivalent: key at a-8 == *b
 //   0x005c33a0 WCValSkipListDict<int, DirectX::CSoundEffectBuffer> base_equivalent: key at a-0x14 == *b
 //   0x005c33c0 WCValSkipListDict<int, DirectX::CSoundEffectBuffer> base_less_than: key at a-0x14 < *b (signed)
+//   (wip/watcom-r6) 0x006099e0 / 0x00609a00 WCValSkipListDict<unsigned int, Lobby::CLMMessageBlock>
+//              base_equivalent / base_less_than: key at a-0x28 == / < *b (unsigned)
+//   0x004723c0 / 0x004723e0 WCValSkipListDict<unsigned long, CNetSession::CSyncInfo>: the
+//              same with the key at a-0xc
+// and the value lists' and the sorted int vector's:
+//   0x00427f80 WCStack<bool, ..> base_equivalent: the bytes *a == *b
+//   0x00427fa0 WCQueue<MsgConsole, ..> base_equivalent: the 20 bytes at a and b equal
+//   0x00414180 WCValSortedVector<int> base_less_than: *a < *b (signed)
+//   0x00609ce0 WCValOrderedVector<Lobby::CLMMessageBlock> base_equivalent:
+//              key(a) == key(b), key = 0x601500 (thiscall; a forwarder to 0x618250)
 
 #include "hooks.h"
 #include "msvc6/string.h"
@@ -44,6 +84,15 @@ using MemberCompareFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx
 
 std::uint32_t CompareThrough(std::uintptr_t member, std::uint32_t a, std::uint32_t b) {
     return reinterpret_cast<MemberCompareFn>(member)(a, nullptr, b) & 0xFF;
+}
+
+std::uint32_t Pointee(std::uint32_t address) {
+    return *reinterpret_cast<const std::uint32_t*>(address);
+}
+
+// The pointer vectors' form: the member on the pointed-to elements.
+std::uint32_t ComparePointees(std::uintptr_t member, std::uint32_t a, std::uint32_t b) {
+    return reinterpret_cast<MemberCompareFn>(member)(Pointee(a), nullptr, Pointee(b));
 }
 
 constexpr std::uintptr_t kPlayerEqual = 0x0049f100;  // GamePlayerSetup::operator== (ours)
@@ -67,6 +116,87 @@ std::uint32_t __stdcall TeamVectorLessThan(std::uint32_t a, std::uint32_t b) {
 // Purpose: Equality callback of a lobby vector.
 std::uint32_t __stdcall LobbyVectorEquivalent(std::uint32_t a, std::uint32_t b) {
     return CompareThrough(kLobbyEqual, a, b);
+}
+
+// Purpose: Equality and ordering callbacks of the network's, the lobby's
+// and the display code's value vectors.
+std::uint32_t __stdcall VectorCallback_44cb00(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005dc780, a, b);
+}
+std::uint32_t __stdcall VectorCallback_44cbc0(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005dc460, a, b);
+}
+std::uint32_t __stdcall VectorCallback_462960(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005bb340, a, b);
+}
+std::uint32_t __stdcall VectorCallback_462980(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005bb3a0, a, b);
+}
+std::uint32_t __stdcall VectorCallback_4682f0(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005ba970, a, b);
+}
+std::uint32_t __stdcall VectorCallback_541650(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005ec200, a, b);
+}
+std::uint32_t __stdcall VectorCallback_541670(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005ec250, a, b);
+}
+std::uint32_t __stdcall VectorCallback_5b7aa0(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005b69c0, a, b);
+}
+std::uint32_t __stdcall VectorCallback_5b7bf0(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005b6c60, a, b);
+}
+std::uint32_t __stdcall VectorCallback_5bdbb0(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005bd260, a, b);
+}
+std::uint32_t __stdcall VectorCallback_5dd740(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005ebfd0, a, b);
+}
+std::uint32_t __stdcall VectorCallback_5dd880(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005ed220, a, b);
+}
+std::uint32_t __stdcall VectorCallback_5ddb80(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x005c4830, a, b);
+}
+std::uint32_t __stdcall VectorCallback_609920(std::uint32_t a, std::uint32_t b) {
+    return CompareThrough(0x006027d0, a, b);
+}
+
+// Purpose: Equality and ordering callbacks of the network's and the
+// lobby's pointer vectors and the game-thread list.
+std::uint32_t __stdcall VectorCallback_472180(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x0049d990, a, b);
+}
+std::uint32_t __stdcall VectorCallback_4721a0(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x0049d9c0, a, b);
+}
+std::uint32_t __stdcall VectorCallback_472220(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x0049d7f0, a, b);
+}
+std::uint32_t __stdcall VectorCallback_4722a0(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x0049d940, a, b);
+}
+std::uint32_t __stdcall VectorCallback_4722c0(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x0049d900, a, b);
+}
+std::uint32_t __stdcall VectorCallback_472340(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x0049d9f0, a, b);
+}
+std::uint32_t __stdcall VectorCallback_5b7930(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x0060ec00, a, b);
+}
+std::uint32_t __stdcall VectorCallback_462ac0(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x005c0f80, a, b) & 0xFF;
+}
+std::uint32_t __stdcall VectorCallback_462ae0(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x005c0fa0, a, b) & 0xFF;
+}
+std::uint32_t __stdcall VectorCallback_5f3da0(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x005ed220, a, b) & 0xFF;
+}
+std::uint32_t __stdcall VectorCallback_5f3dc0(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x005ed3e0, a, b) & 0xFF;
 }
 
 namespace {
@@ -151,6 +281,43 @@ std::uint32_t __stdcall SkipDictKeyEqual_5c33a0(std::uint32_t node, std::uint32_
 std::uint32_t __stdcall SkipDictKeyLess_5c33c0(std::uint32_t node, std::uint32_t key) {
     return ReadAt<std::int32_t>(node - 0x14) < ReadAt<std::int32_t>(key) ? 1 : 0;
 }
+// The lobby's message blocks and the network's sync records.
+std::uint32_t __stdcall SkipDictKeyEqual_6099e0(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::uint32_t>(node - 0x28) == ReadAt<std::uint32_t>(key) ? 1 : 0;
+}
+std::uint32_t __stdcall SkipDictKeyLess_609a00(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::uint32_t>(node - 0x28) < ReadAt<std::uint32_t>(key) ? 1 : 0;
+}
+std::uint32_t __stdcall SkipDictKeyEqual_4723c0(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::uint32_t>(node - 0xc) == ReadAt<std::uint32_t>(key) ? 1 : 0;
+}
+std::uint32_t __stdcall SkipDictKeyLess_4723e0(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::uint32_t>(node - 0xc) < ReadAt<std::uint32_t>(key) ? 1 : 0;
+}
+
+// Purpose: Equality callbacks of the screens' bool stack and message
+// queue, and the ordering callback of the sorted int vector.
+std::uint32_t __stdcall BoolListEquivalent(std::uint32_t a, std::uint32_t b) {
+    return ReadAt<std::uint8_t>(a) == ReadAt<std::uint8_t>(b) ? 1 : 0;
+}
+std::uint32_t __stdcall MessageListEquivalent(std::uint32_t a, std::uint32_t b) {
+    constexpr std::size_t kMessageBytes = 20;  // MsgConsole
+    return std::memcmp(reinterpret_cast<const void*>(a), reinterpret_cast<const void*>(b), kMessageBytes) == 0 ? 1 : 0;
+}
+std::uint32_t __stdcall IntVectorLessThan(std::uint32_t a, std::uint32_t b) {
+    return ReadAt<std::int32_t>(a) < ReadAt<std::int32_t>(b) ? 1 : 0;
+}
+
+namespace {
+constexpr std::uintptr_t kMessageBlockKey = 0x00601500;  // a message block's key (forwards to 0x618250)
+using KeyFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx);
+}  // namespace
+
+// Purpose: Equality callback of the lobby's vector of message blocks.
+std::uint32_t __stdcall MessageBlockVectorEquivalent(std::uint32_t a, std::uint32_t b) {
+    const std::uint32_t keyA = reinterpret_cast<KeyFn>(kMessageBlockKey)(a, nullptr);
+    return keyA == reinterpret_cast<KeyFn>(kMessageBlockKey)(b, nullptr) ? 1 : 0;
+}
 
 S3RE_HOOK(0x00462850, UShortVectorEquivalent, VectorCallbackFn, Original_UShortVectorEquivalent,
           UShortVectorEquivalent);
@@ -174,6 +341,64 @@ S3RE_HOOK(0x00437530, PlayerVectorEquivalent, VectorCallbackFn, Original_PlayerV
 S3RE_HOOK(0x00437550, TeamVectorLessThan, VectorCallbackFn, Original_TeamVectorLessThan, TeamVectorLessThan);
 S3RE_HOOK(0x0044c4a0, LobbyVectorEquivalent, VectorCallbackFn, Original_LobbyVectorEquivalent,
           LobbyVectorEquivalent);
+S3RE_HOOK(0x0044cb00, VectorCallback_44cb00, VectorCallbackFn, Original_VectorCallback_44cb00,
+          VectorCallback_44cb00);
+S3RE_HOOK(0x0044cbc0, VectorCallback_44cbc0, VectorCallbackFn, Original_VectorCallback_44cbc0,
+          VectorCallback_44cbc0);
+S3RE_HOOK(0x00462960, VectorCallback_462960, VectorCallbackFn, Original_VectorCallback_462960,
+          VectorCallback_462960);
+S3RE_HOOK(0x00462980, VectorCallback_462980, VectorCallbackFn, Original_VectorCallback_462980,
+          VectorCallback_462980);
+S3RE_HOOK(0x004682f0, VectorCallback_4682f0, VectorCallbackFn, Original_VectorCallback_4682f0,
+          VectorCallback_4682f0);
+S3RE_HOOK(0x00541650, VectorCallback_541650, VectorCallbackFn, Original_VectorCallback_541650,
+          VectorCallback_541650);
+S3RE_HOOK(0x00541670, VectorCallback_541670, VectorCallbackFn, Original_VectorCallback_541670,
+          VectorCallback_541670);
+S3RE_HOOK(0x005b7aa0, VectorCallback_5b7aa0, VectorCallbackFn, Original_VectorCallback_5b7aa0,
+          VectorCallback_5b7aa0);
+S3RE_HOOK(0x005b7bf0, VectorCallback_5b7bf0, VectorCallbackFn, Original_VectorCallback_5b7bf0,
+          VectorCallback_5b7bf0);
+S3RE_HOOK(0x005bdbb0, VectorCallback_5bdbb0, VectorCallbackFn, Original_VectorCallback_5bdbb0,
+          VectorCallback_5bdbb0);
+S3RE_HOOK(0x005dd740, VectorCallback_5dd740, VectorCallbackFn, Original_VectorCallback_5dd740,
+          VectorCallback_5dd740);
+S3RE_HOOK(0x005dd880, VectorCallback_5dd880, VectorCallbackFn, Original_VectorCallback_5dd880,
+          VectorCallback_5dd880);
+S3RE_HOOK(0x005ddb80, VectorCallback_5ddb80, VectorCallbackFn, Original_VectorCallback_5ddb80,
+          VectorCallback_5ddb80);
+S3RE_HOOK(0x00609920, VectorCallback_609920, VectorCallbackFn, Original_VectorCallback_609920,
+          VectorCallback_609920);
+S3RE_HOOK(0x00472180, VectorCallback_472180, VectorCallbackFn, Original_VectorCallback_472180,
+          VectorCallback_472180);
+S3RE_HOOK(0x004721a0, VectorCallback_4721a0, VectorCallbackFn, Original_VectorCallback_4721a0,
+          VectorCallback_4721a0);
+S3RE_HOOK(0x00472220, VectorCallback_472220, VectorCallbackFn, Original_VectorCallback_472220,
+          VectorCallback_472220);
+S3RE_HOOK(0x004722a0, VectorCallback_4722a0, VectorCallbackFn, Original_VectorCallback_4722a0,
+          VectorCallback_4722a0);
+S3RE_HOOK(0x004722c0, VectorCallback_4722c0, VectorCallbackFn, Original_VectorCallback_4722c0,
+          VectorCallback_4722c0);
+S3RE_HOOK(0x00472340, VectorCallback_472340, VectorCallbackFn, Original_VectorCallback_472340,
+          VectorCallback_472340);
+S3RE_HOOK(0x005b7930, VectorCallback_5b7930, VectorCallbackFn, Original_VectorCallback_5b7930,
+          VectorCallback_5b7930);
+S3RE_HOOK(0x00462ac0, VectorCallback_462ac0, VectorCallbackFn, Original_VectorCallback_462ac0,
+          VectorCallback_462ac0);
+S3RE_HOOK(0x00462ae0, VectorCallback_462ae0, VectorCallbackFn, Original_VectorCallback_462ae0,
+          VectorCallback_462ae0);
+S3RE_HOOK(0x005f3da0, VectorCallback_5f3da0, VectorCallbackFn, Original_VectorCallback_5f3da0,
+          VectorCallback_5f3da0);
+S3RE_HOOK(0x005f3dc0, VectorCallback_5f3dc0, VectorCallbackFn, Original_VectorCallback_5f3dc0,
+          VectorCallback_5f3dc0);
+S3RE_HOOK(0x006099e0, SkipDictKeyEqual_6099e0, VectorCallbackFn, Original_SkipDictKeyEqual_6099e0, SkipDictKeyEqual_6099e0);
+S3RE_HOOK(0x00609a00, SkipDictKeyLess_609a00, VectorCallbackFn, Original_SkipDictKeyLess_609a00, SkipDictKeyLess_609a00);
+S3RE_HOOK(0x004723c0, SkipDictKeyEqual_4723c0, VectorCallbackFn, Original_SkipDictKeyEqual_4723c0, SkipDictKeyEqual_4723c0);
+S3RE_HOOK(0x004723e0, SkipDictKeyLess_4723e0, VectorCallbackFn, Original_SkipDictKeyLess_4723e0, SkipDictKeyLess_4723e0);
+S3RE_HOOK(0x00427f80, BoolListEquivalent, VectorCallbackFn, Original_BoolListEquivalent, BoolListEquivalent);
+S3RE_HOOK(0x00427fa0, MessageListEquivalent, VectorCallbackFn, Original_MessageListEquivalent, MessageListEquivalent);
+S3RE_HOOK(0x00414180, IntVectorLessThan, VectorCallbackFn, Original_IntVectorLessThan, IntVectorLessThan);
+S3RE_HOOK(0x00609ce0, MessageBlockVectorEquivalent, VectorCallbackFn, Original_MessageBlockVectorEquivalent, MessageBlockVectorEquivalent);
 
 // ---------------------------------------------------------------------------
 // Tests: the operator replaced by a recording stub that returns a random
@@ -231,10 +456,17 @@ const InlineCase kInlineCases[] = {
     {Original_SkipDictKeyEqual_4a6b00, &SkipDictKeyEqual_4a6b00},
     {Original_SkipDictKeyEqual_5c33a0, &SkipDictKeyEqual_5c33a0},
     {Original_SkipDictKeyLess_5c33c0, &SkipDictKeyLess_5c33c0},
+    {Original_SkipDictKeyEqual_6099e0, &SkipDictKeyEqual_6099e0},
+    {Original_SkipDictKeyLess_609a00, &SkipDictKeyLess_609a00},
+    {Original_SkipDictKeyEqual_4723c0, &SkipDictKeyEqual_4723c0},
+    {Original_SkipDictKeyLess_4723e0, &SkipDictKeyLess_4723e0},
+    {Original_BoolListEquivalent, &BoolListEquivalent},
+    {Original_MessageListEquivalent, &MessageListEquivalent},
+    {Original_IntVectorLessThan, &IntVectorLessThan},
 };
 
 constexpr std::size_t kBuffer = 0x160;
-constexpr std::size_t kKeyOffset = 0x20;  // a and b point this far into their buffers
+constexpr std::size_t kKeyOffset = 0x30;  // a and b point this far into their buffers (keys up to 0x28 before)
 
 void PutString(test::Rng& rng, std::uint8_t* buffer, char* text, const char* other) {
     const std::uint32_t len = rng.Below(13);
@@ -264,7 +496,7 @@ bool CompareInline(test::Context& ctx, const InlineCase& c, int cases) {
                 b[rng.Below(sizeof(b))] = static_cast<std::uint8_t>(rng.Next32());
             }
             if (rng.Chance(1, 3)) {
-                b[kKeyOffset - 0x14 + rng.Below(0x18)] ^= 1;  // near the keys
+                b[kKeyOffset - 0x28 + rng.Below(0x2c)] ^= 1;  // near the keys
             }
         }
         // Strings (allocator, ptr, len, res) at the key offset (12 random
@@ -289,7 +521,149 @@ std::uint32_t __stdcall WrongKeyLess(std::uint32_t node, std::uint32_t key) {
     return ReadAt<std::int32_t>(node - 8) < ReadAt<std::int32_t>(key) ? 1 : 0;
 }
 
+
+// The other member callbacks: a and b point at two random words (the
+// pointer vectors' elements); the member replaced by a recording stub that
+// returns a random value. Compared: the calls (ECX and the argument) and EAX.
+template <std::uintptr_t Member>
+bool CompareMember(test::Context& ctx, VectorCallbackFn original, VectorCallbackFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        std::uint32_t words[2];
+        ctx.rng().Fill(words, sizeof(words));
+        const auto a = reinterpret_cast<std::uint32_t>(&words[0]);
+        const auto b = reinterpret_cast<std::uint32_t>(&words[1]);
+        g_stubResult = ctx.rng().Next32();
+        std::uint32_t ra = 0, rb = 0;
+        std::vector<test::StubCall> callsA, callsB;
+        {
+            test::CalleeStubs stubs;
+            stubs.Install<1, Member>([](game::CGameData*, std::uint32_t, const std::uint32_t*) { return g_stubResult; });
+            ra = original(a, b);
+            callsA = stubs.Take();
+            rb = candidate(a, b);
+            callsB = stubs.Take();
+        }
+        if (!S3RE_EXPECT_EQ(ra, rb) || !S3RE_EXPECT(callsA == callsB)) {
+            ctx.Fail(__FILE__, __LINE__, "  member 0x%x case %d", static_cast<unsigned>(Member), i);
+            return false;
+        }
+    }
+    return true;
+}
+
+struct MemberCase {
+    VectorCallbackFn original;
+    VectorCallbackFn ours;
+    bool (*compare)(test::Context&, VectorCallbackFn, VectorCallbackFn, int);
+};
+
+const MemberCase kMemberCases[] = {
+    {Original_VectorCallback_44cb00, &VectorCallback_44cb00, &CompareMember<0x005dc780>},
+    {Original_VectorCallback_44cbc0, &VectorCallback_44cbc0, &CompareMember<0x005dc460>},
+    {Original_VectorCallback_462960, &VectorCallback_462960, &CompareMember<0x005bb340>},
+    {Original_VectorCallback_462980, &VectorCallback_462980, &CompareMember<0x005bb3a0>},
+    {Original_VectorCallback_4682f0, &VectorCallback_4682f0, &CompareMember<0x005ba970>},
+    {Original_VectorCallback_541650, &VectorCallback_541650, &CompareMember<0x005ec200>},
+    {Original_VectorCallback_541670, &VectorCallback_541670, &CompareMember<0x005ec250>},
+    {Original_VectorCallback_5b7aa0, &VectorCallback_5b7aa0, &CompareMember<0x005b69c0>},
+    {Original_VectorCallback_5b7bf0, &VectorCallback_5b7bf0, &CompareMember<0x005b6c60>},
+    {Original_VectorCallback_5bdbb0, &VectorCallback_5bdbb0, &CompareMember<0x005bd260>},
+    {Original_VectorCallback_5dd740, &VectorCallback_5dd740, &CompareMember<0x005ebfd0>},
+    {Original_VectorCallback_5dd880, &VectorCallback_5dd880, &CompareMember<0x005ed220>},
+    {Original_VectorCallback_5ddb80, &VectorCallback_5ddb80, &CompareMember<0x005c4830>},
+    {Original_VectorCallback_609920, &VectorCallback_609920, &CompareMember<0x006027d0>},
+    {Original_VectorCallback_472180, &VectorCallback_472180, &CompareMember<0x0049d990>},
+    {Original_VectorCallback_4721a0, &VectorCallback_4721a0, &CompareMember<0x0049d9c0>},
+    {Original_VectorCallback_472220, &VectorCallback_472220, &CompareMember<0x0049d7f0>},
+    {Original_VectorCallback_4722a0, &VectorCallback_4722a0, &CompareMember<0x0049d940>},
+    {Original_VectorCallback_4722c0, &VectorCallback_4722c0, &CompareMember<0x0049d900>},
+    {Original_VectorCallback_472340, &VectorCallback_472340, &CompareMember<0x0049d9f0>},
+    {Original_VectorCallback_5b7930, &VectorCallback_5b7930, &CompareMember<0x0060ec00>},
+    {Original_VectorCallback_462ac0, &VectorCallback_462ac0, &CompareMember<0x005c0f80>},
+    {Original_VectorCallback_462ae0, &VectorCallback_462ae0, &CompareMember<0x005c0fa0>},
+    {Original_VectorCallback_5f3da0, &VectorCallback_5f3da0, &CompareMember<0x005ed220>},
+    {Original_VectorCallback_5f3dc0, &VectorCallback_5f3dc0, &CompareMember<0x005ed3e0>},
+};
+
+// Wrong: the pointer form without dereferencing / AL not zero-extended.
+std::uint32_t __stdcall WrongPointerCallback(std::uint32_t a, std::uint32_t b) {
+    return reinterpret_cast<MemberCompareFn>(0x0049d990)(a, nullptr, b);
+}
+std::uint32_t __stdcall WrongByteCallback(std::uint32_t a, std::uint32_t b) {
+    return ComparePointees(0x005c0f80, a, b);
+}
+
 }  // namespace
+
+// The message-block callback: the key function stubbed (keys 0..3 for a
+// and b, so often equal).
+std::uint32_t g_keys[2] = {};
+int g_nextKey = 0;
+
+bool CompareKeyCallback(test::Context& ctx, VectorCallbackFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        g_keys[0] = ctx.rng().Below(4);
+        g_keys[1] = ctx.rng().Below(4);
+        std::uint32_t words[2];
+        ctx.rng().Fill(words, sizeof(words));
+        const auto a = reinterpret_cast<std::uint32_t>(&words[0]);
+        const auto b = reinterpret_cast<std::uint32_t>(&words[1]);
+        std::uint32_t ra = 0, rb = 0;
+        std::vector<test::StubCall> callsA, callsB;
+        {
+            test::CalleeStubs stubs;
+            stubs.Install<0, kMessageBlockKey>([](game::CGameData*, std::uint32_t, const std::uint32_t*) {
+                const std::uint32_t key = g_keys[g_nextKey];
+                g_nextKey = 1 - g_nextKey;
+                return key;
+            });
+            g_nextKey = 0;
+            ra = Original_MessageBlockVectorEquivalent(a, b);
+            callsA = stubs.Take();
+            g_nextKey = 0;
+            rb = candidate(a, b);
+            callsB = stubs.Take();
+        }
+        if (!S3RE_EXPECT_EQ(ra, rb) || !S3RE_EXPECT(callsA == callsB)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Wrong: the keys read in the other order.
+std::uint32_t __stdcall WrongKeyCallback(std::uint32_t a, std::uint32_t b) {
+    const std::uint32_t keyB = reinterpret_cast<KeyFn>(kMessageBlockKey)(b, nullptr);
+    return keyB == reinterpret_cast<KeyFn>(kMessageBlockKey)(a, nullptr) ? 1 : 0;
+}
+
+S3RE_TEST(WatcomMemberCallbacks_MatchOriginal) {
+    for (const MemberCase& c : kMemberCases) {
+        if (!c.compare(ctx, c.original, c.ours, 200)) {
+            return;
+        }
+    }
+    CompareKeyCallback(ctx, &MessageBlockVectorEquivalent, 200);
+}
+
+S3RE_TEST(WatcomMemberCallbacks_ComparisonDetectsWrongImplementation) {
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareMember<0x0049d990>(probe, Original_VectorCallback_472180, &WrongPointerCallback, 20);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareMember<0x005c0f80>(probe, Original_VectorCallback_462ac0, &WrongByteCallback, 20);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareKeyCallback(probe, &WrongKeyCallback, 20);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+}
 
 S3RE_TEST(WatcomInlineCallbacks_MatchOriginal) {
     for (const InlineCase& c : kInlineCases) {

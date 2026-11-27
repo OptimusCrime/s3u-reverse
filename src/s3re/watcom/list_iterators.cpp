@@ -5,6 +5,14 @@
 //   0x0041b080 WCIsvListBase                                    0x655fa4
 //   0x00428bd0 WCIsvSListBase<WCNIsvSLink<CScreenElement*>>     0x655bc4
 //   0x00428bf0 WCIsvSListBase<WCNIsvSLink<bool>>                0x655be0
+//   0x005de110 WCIsvSListBase<WCNIsvSLink<LobbyClient::CStatusMessage>> 0x65d2c4
+//   0x0053ea60 WCIsvSListBase<WCNIsvSLink<Win32::CWin32Waitable*>>  0x657424 (a static
+//              initializer follows it inside Ghidra's function)
+// Singly linked lists with link allocators, (allocate, deallocate) ret 8:
+// +4 = +8 = +0xc = 0, +0x10 = allocate, +0x14 = deallocate, vtable.
+//   0x004639e0 WCPtrListBase<Win32::CWin32Waitable, WCValSList<..*>>  0x657454
+//   0x005b7d40 WCValSList<DirectX::CSurface*>                         0x65cb68
+//   0x005b7e00 WCValSList<DirectX::CPalette*>                         0x65cb78
 // Skip-list iterator bases, (dictionary) ret 4: +4 = 0, +8 = the
 // dictionary, +0xc = +0x10 = 0, vtable.
 //   0x004726e0 WCSkipListIterBase<WCSkipListDictKeyVal<unsigned long, WCPtrSortedVector<CExecuteType>>> 0x65778c
@@ -12,6 +20,15 @@
 //   0x00499600 WCSkipListIterBase<WCSkipListDictKeyVal<int, String>>                                   0x65854c
 //   0x005c34f0 WCSkipListIterBase<WCSkipListDictKeyVal<int, DirectX::CSoundEffectBuffer>>             0x65cf94
 //   0x005ffc60 WCSkipListIterBase<WCSkipListDictKeyVal<unsigned int, DirectX::CSoundEffect*>>          0x65d478
+//   0x00609fd0 WCSkipListIterBase<WCSkipListDictKeyVal<unsigned int, Lobby::CLMMessageBlock>>          0x65d61c
+// List iterators, (list) ret 4: the same, but +0x10 = 1 (the state "before
+// the first"; WCListIterBase 0x5b72b0 in directx_drawer.cpp is the third copy).
+//   0x00463be0 WCPtrSListIter<Win32::CWin32Waitable>                                                  0x657464
+//   0x005b7d10 WCValListIterBase<DirectX::CGameThread*, WCPtrSList<DirectX::CGameThread>, ..>       0x65cb60
+// Destructors that only store their base's vtable (EAX is left as the
+// caller had it; the library declares them void):
+//   0x00499620 WCIterExcept::~WCIterExcept   WCIterExcept 0x656a38
+//   0x00423a10 WCSkipNonTempBase::~          WCExcept 0x655438
 // WCSkipListIterBase::operator++ (0x00499df0; shared by the instantiations,
 // 10 callers): () -> bool. Without a dictionary, or past the end (+0x10):
 // past the end = 1, the library's empty error hook 0x59f200, false. A fresh
@@ -37,6 +54,11 @@ struct IsvListBase {
     std::uint32_t last;   // +0x08 the last node (0: empty)
     std::uint32_t count;  // +0x0c
 };
+struct AllocatingSList {
+    IsvListBase base;
+    std::uint32_t allocate;    // +0x10 the link allocator (0: operator new)
+    std::uint32_t deallocate;  // +0x14 the link deallocator (0: operator delete)
+};
 struct SkipListIterBase {
     std::uint32_t vtable;
     std::uint32_t unk04;
@@ -47,6 +69,7 @@ struct SkipListIterBase {
 #pragma pack(pop)
 static_assert(sizeof(IsvListBase) == 0x10);
 static_assert(sizeof(SkipListIterBase) == 0x14);
+static_assert(sizeof(AllocatingSList) == 0x18);
 
 namespace {
 
@@ -67,6 +90,15 @@ SkipListIterBase* ConstructSkipListIter(SkipListIterBase* self, std::uint32_t di
     return self;
 }
 
+// The list iterators share the layout; their state (+0x10) starts at 1.
+constexpr std::uint32_t kListIterBeforeFirst = 1;
+
+SkipListIterBase* ConstructListIter(SkipListIterBase* self, std::uint32_t list, std::uint32_t vtable) {
+    ConstructSkipListIter(self, list, vtable);
+    self->at_end = kListIterBeforeFirst;
+    return self;
+}
+
 }  // namespace
 
 using IsvListConstructFn = IsvListBase*(__fastcall*)(IsvListBase* self, void* edx);
@@ -83,6 +115,43 @@ IsvListBase* __fastcall IsvListConstructor_428bd0(IsvListBase* self, void*) {
 }
 IsvListBase* __fastcall IsvListConstructor_428bf0(IsvListBase* self, void*) {
     return ConstructIsvList(self, vt::kWCIsvSListBase_bool);
+}
+IsvListBase* __fastcall IsvListConstructor_5de110(IsvListBase* self, void*) {
+    return ConstructIsvList(self, vt::kWCIsvSListBase_CStatusMessage);
+}
+IsvListBase* __fastcall IsvListConstructor_53ea60(IsvListBase* self, void*) {
+    return ConstructIsvList(self, vt::kWaitableIsvSListBase);
+}
+
+using SListConstructFn = AllocatingSList*(__fastcall*)(AllocatingSList* self, void* edx, std::uint32_t allocate,
+                                                       std::uint32_t deallocate);
+
+namespace {
+AllocatingSList* ConstructSList(AllocatingSList* self, std::uint32_t allocate, std::uint32_t deallocate,
+                                std::uint32_t vtable) {
+    self->base.unk04 = 0;
+    self->base.last = 0;
+    self->base.count = 0;
+    self->allocate = allocate;
+    self->deallocate = deallocate;
+    self->base.vtable = vtable;
+    return self;
+}
+}  // namespace
+
+// Purpose: Constructors of the network thread's waitable list and the draw
+// thread's surface and palette lists (with their link allocators).
+AllocatingSList* __fastcall SListConstructor_4639e0(AllocatingSList* self, void*, std::uint32_t allocate,
+                                                    std::uint32_t deallocate) {
+    return ConstructSList(self, allocate, deallocate, vt::kWCPtrListBase_CWin32Waitable);
+}
+AllocatingSList* __fastcall SListConstructor_5b7d40(AllocatingSList* self, void*, std::uint32_t allocate,
+                                                    std::uint32_t deallocate) {
+    return ConstructSList(self, allocate, deallocate, vt::kWCValSList_CSurfaceP);
+}
+AllocatingSList* __fastcall SListConstructor_5b7e00(AllocatingSList* self, void*, std::uint32_t allocate,
+                                                    std::uint32_t deallocate) {
+    return ConstructSList(self, allocate, deallocate, vt::kWCValSList_CPaletteP);
 }
 
 // Purpose: Constructors of iterators over the skip-list dictionaries (the
@@ -101,6 +170,29 @@ SkipListIterBase* __fastcall SkipListIterConstructor_5c34f0(SkipListIterBase* se
 }
 SkipListIterBase* __fastcall SkipListIterConstructor_5ffc60(SkipListIterBase* self, void*, std::uint32_t dictionary) {
     return ConstructSkipListIter(self, dictionary, vt::kSoundEffectIterBase);
+}
+SkipListIterBase* __fastcall SkipListIterConstructor_609fd0(SkipListIterBase* self, void*, std::uint32_t dictionary) {
+    return ConstructSkipListIter(self, dictionary, vt::kWCSkipListIterBase_UIntMessageBlock);
+}
+
+// Purpose: Constructors of iterators over the network thread's waitables
+// and the game threads' list.
+SkipListIterBase* __fastcall ListIterConstructor_463be0(SkipListIterBase* self, void*, std::uint32_t list) {
+    return ConstructListIter(self, list, vt::kWCPtrSListIter_CWin32Waitable);
+}
+SkipListIterBase* __fastcall ListIterConstructor_5b7d10(SkipListIterBase* self, void*, std::uint32_t list) {
+    return ConstructListIter(self, list, vt::kWCValListIterBase_CGameThreadP);
+}
+
+using BaseDestructorFn = void(__fastcall*)(std::uint32_t* self, void* edx);
+
+// Purpose: Destructors of the iterators' and the skip lists' library base
+// classes (they only restore the base's vtable).
+void __fastcall WCIterExcept_Destroy(std::uint32_t* self, void*) {
+    *self = vt::kWCIterExcept;
+}
+void __fastcall WCSkipNonTempBase_Destroy(std::uint32_t* self, void*) {
+    *self = vt::kWCExcept;
 }
 
 constexpr std::uint32_t kDictionaryHeader = 0x70;  // the skip list's header node in the dictionary
@@ -143,6 +235,25 @@ S3RE_HOOK(0x005c34f0, SkipListIterConstructor_5c34f0, SkipListIterConstructFn,
           Original_SkipListIterConstructor_5c34f0, SkipListIterConstructor_5c34f0);
 S3RE_HOOK(0x005ffc60, SkipListIterConstructor_5ffc60, SkipListIterConstructFn,
           Original_SkipListIterConstructor_5ffc60, SkipListIterConstructor_5ffc60);
+S3RE_HOOK(0x0053ea60, IsvListConstructor_53ea60, IsvListConstructFn, Original_IsvListConstructor_53ea60,
+          IsvListConstructor_53ea60);
+S3RE_HOOK(0x004639e0, SListConstructor_4639e0, SListConstructFn, Original_SListConstructor_4639e0,
+          SListConstructor_4639e0);
+S3RE_HOOK(0x005b7d40, SListConstructor_5b7d40, SListConstructFn, Original_SListConstructor_5b7d40,
+          SListConstructor_5b7d40);
+S3RE_HOOK(0x005b7e00, SListConstructor_5b7e00, SListConstructFn, Original_SListConstructor_5b7e00,
+          SListConstructor_5b7e00);
+S3RE_HOOK(0x005de110, IsvListConstructor_5de110, IsvListConstructFn, Original_IsvListConstructor_5de110,
+          IsvListConstructor_5de110);
+S3RE_HOOK(0x00609fd0, SkipListIterConstructor_609fd0, SkipListIterConstructFn,
+          Original_SkipListIterConstructor_609fd0, SkipListIterConstructor_609fd0);
+S3RE_HOOK(0x00463be0, ListIterConstructor_463be0, SkipListIterConstructFn, Original_ListIterConstructor_463be0,
+          ListIterConstructor_463be0);
+S3RE_HOOK(0x005b7d10, ListIterConstructor_5b7d10, SkipListIterConstructFn, Original_ListIterConstructor_5b7d10,
+          ListIterConstructor_5b7d10);
+S3RE_HOOK(0x00499620, WCIterExcept_Destroy, BaseDestructorFn, Original_WCIterExcept_Destroy, WCIterExcept_Destroy);
+S3RE_HOOK(0x00423a10, WCSkipNonTempBase_Destroy, BaseDestructorFn, Original_WCSkipNonTempBase_Destroy,
+          WCSkipNonTempBase_Destroy);
 
 // ---------------------------------------------------------------------------
 // Tests: random objects and arguments, every instantiation; the bytes and
@@ -164,6 +275,8 @@ const IsvPair kIsvPairs[] = {
     {Original_IsvListConstructor_41b080, &IsvListConstructor_41b080},
     {Original_IsvListConstructor_428bd0, &IsvListConstructor_428bd0},
     {Original_IsvListConstructor_428bf0, &IsvListConstructor_428bf0},
+    {Original_IsvListConstructor_5de110, &IsvListConstructor_5de110},
+    {Original_IsvListConstructor_53ea60, &IsvListConstructor_53ea60},
 };
 const IterPair kIterPairs[] = {
     {Original_SkipListIterConstructor_4726e0, &SkipListIterConstructor_4726e0},
@@ -171,6 +284,9 @@ const IterPair kIterPairs[] = {
     {Original_SkipListIterConstructor_499600, &SkipListIterConstructor_499600},
     {Original_SkipListIterConstructor_5c34f0, &SkipListIterConstructor_5c34f0},
     {Original_SkipListIterConstructor_5ffc60, &SkipListIterConstructor_5ffc60},
+    {Original_SkipListIterConstructor_609fd0, &SkipListIterConstructor_609fd0},
+    {Original_ListIterConstructor_463be0, &ListIterConstructor_463be0},
+    {Original_ListIterConstructor_5b7d10, &ListIterConstructor_5b7d10},
 };
 
 bool CompareIsv(test::Context& ctx, const IsvPair& pair, int cases) {
@@ -281,6 +397,68 @@ S3RE_TEST(WatcomListIteratorConstructors_MatchOriginal) {
             return;
         }
     }
+}
+
+// The allocating lists' constructors on random objects and arguments.
+bool CompareSListConstruct(test::Context& ctx, SListConstructFn original, SListConstructFn ours, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        AllocatingSList a, b;
+        ctx.rng().Fill(&a, sizeof(a));
+        std::memcpy(&b, &a, sizeof(a));
+        const std::uint32_t allocate = ctx.rng().Next32(), deallocate = ctx.rng().Next32();
+        AllocatingSList* ra = original(&a, nullptr, allocate, deallocate);
+        AllocatingSList* rb = ours(&b, nullptr, allocate, deallocate);
+        if (!S3RE_EXPECT(ra == &a && rb == &b) || !S3RE_EXPECT_MEM_EQ(&a, &b, sizeof(a))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Wrong: the allocators swapped.
+AllocatingSList* __fastcall WrongSListConstruct(AllocatingSList* self, void* edx, std::uint32_t allocate,
+                                                std::uint32_t deallocate) {
+    return SListConstructor_5b7d40(self, edx, deallocate, allocate);
+}
+
+S3RE_TEST(WatcomSListConstructors_MatchOriginal) {
+    CompareSListConstruct(ctx, Original_SListConstructor_4639e0, &SListConstructor_4639e0, 100) &&
+        CompareSListConstruct(ctx, Original_SListConstructor_5b7d40, &SListConstructor_5b7d40, 100) &&
+        CompareSListConstruct(ctx, Original_SListConstructor_5b7e00, &SListConstructor_5b7e00, 100);
+}
+
+S3RE_TEST(WatcomSListConstructors_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSListConstruct(probe, Original_SListConstructor_5b7d40, &WrongSListConstruct, 10);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+// The base destructors on random words.
+bool CompareBaseDestructor(test::Context& ctx, BaseDestructorFn original, BaseDestructorFn ours, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        std::uint32_t a[2], b[2];
+        ctx.rng().Fill(a, sizeof(a));
+        std::memcpy(b, a, sizeof(a));
+        original(a, nullptr);
+        ours(b, nullptr);
+        if (!S3RE_EXPECT_MEM_EQ(a, b, sizeof(a))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return false;
+        }
+    }
+    return true;
+}
+
+S3RE_TEST(WatcomBaseDestructors_MatchOriginal) {
+    CompareBaseDestructor(ctx, Original_WCIterExcept_Destroy, &WCIterExcept_Destroy, 50) &&
+        CompareBaseDestructor(ctx, Original_WCSkipNonTempBase_Destroy, &WCSkipNonTempBase_Destroy, 50);
+}
+
+S3RE_TEST(WatcomBaseDestructors_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareBaseDestructor(probe, Original_WCIterExcept_Destroy, &WCSkipNonTempBase_Destroy, 5);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 S3RE_TEST(SkipListIter_Increment_MatchesOriginal) {

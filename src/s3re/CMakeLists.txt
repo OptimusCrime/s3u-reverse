@@ -35,9 +35,14 @@ add_library(s3re SHARED
 
     # watcom/: Watcom container library code
     watcom/bare_vectors.cpp
+    watcom/element_vectors.cpp
+    watcom/slist_destructors.cpp
     watcom/isv_slist.cpp
     watcom/list_iterators.cpp
+    watcom/skiplist_base.cpp
     watcom/skiplist_dicts.cpp
+    watcom/skiplist_nodes.cpp
+    watcom/sorted_find.cpp
     watcom/ptr_vector.cpp
     watcom/string_vector.cpp
     watcom/ushort_vector.cpp
