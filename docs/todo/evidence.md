@@ -42,9 +42,9 @@ LOGBOOK session entry).
   The panel texts are done (wip/text-r6: Dirk::CTextSurface, the CDrawer
   text helpers 0x4d65e0..0x4d78d0, InitPanelFonts, the message texts,
   BlitVisibleArea, WideToNarrowString); left in the frame drawer's tree:
-  Render_sub_4b4d00 (the panel drawer, 71 KB, 20,000 asm lines: ~430
-  GUI-image triples 0x5faca0 / 0x5fdab0 / 0x5f64c0 with their own stack
-  temporaries, plus calls of the panel helpers), Render_sub_4c85a0 (the
+  (CDrawer::DrawPanel 0x4b4d00 is done, wip/panel-r7; it still wants a
+  whole-game check with its menus open, only an in-game smoke run so far),
+  Render_sub_4c85a0 (the
   settler drawer, 38 KB, 11,250 instructions; its dumpbin listing desyncs
   on a jump table, so frontier.py never lists it), Render_sub_4b26c0 (needs
   both and 0x54cbd0), CDrawer::SetMouseCursor 0x42cb60 (its callees are

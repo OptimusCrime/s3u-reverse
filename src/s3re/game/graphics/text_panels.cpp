@@ -2,7 +2,7 @@
 // Volker\DrawBuilding.cpp and Volker\GameDataSave.cpp): CDrawer helpers
 // that render one text into the 1-bit text surface (Dirk::CTextSurface,
 // text_surface.cpp) and copy it onto the screen as glyph rows. Probably
-// the texts of the in-game menu panels (Render_sub_4b4d00, the panel
+// the texts of the in-game menu panels (CDrawer::DrawPanel 0x4b4d00, the panel
 // drawer, calls them; positions are in "cells" of g_uiCellSize pixels
 // from the drawing origin, the panel is 40 cells wide).
 //

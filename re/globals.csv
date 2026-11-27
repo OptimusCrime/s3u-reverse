@@ -763,3 +763,18 @@ address,name,type,status,notes
 0x00658ac8,g_messageLineCells,const int32_t[4],classified,"The first message line's rect in cells {50, -21, 195, -15}; each further line 6 cells higher (CDrawer::RenderMessageTexts 0x4d82b0). Declared in src/s3re/game/tables.h; used by text_panels.cpp."
 0x006550fc,g_importEnterCriticalSection,CriticalSectionImport,classified,"S3.EXE's import address table slot of EnterCriticalSection (KERNEL32; Win32::CCriticalSection::Enter 0x60d670). Declared in src/s3re/game/globals.h; used by win32_locks.cpp."
 0x00655128,g_importLeaveCriticalSection,CriticalSectionImport,classified,"S3.EXE's import address table slot of LeaveCriticalSection (KERNEL32; Win32::CCriticalSection::Leave 0x60d680). Declared in src/s3re/game/globals.h; used by win32_locks.cpp."
+0x007deb49,g_showBuildCosts,uint8_t,classified,"Non-zero: the build menu of the side panel shows each building's costs (CDrawer::DrawPanel 0x4b4d00, panel_build_menu.cpp). Set elsewhere, not traced. Declared in src/s3re/game/globals.h."
+0x007dfd88,g_panelInputGoods,int32_t[4],classified,"The goods shown in the four input places of the side panel's building menu (CDrawer::DrawPanel 0x4b4d00 zeroes them and writes the shown ones, panel_building_info.cpp); probably read by the panel's click handling. Declared in src/s3re/game/globals.h."
+0x007dfd98,g_panelInputColumns,int32_t[4],classified,The columns (cells) of those four places (CDrawer::DrawPanel 0x4b4d00). Declared in src/s3re/game/globals.h.
+0x006a5718,g_goodsGridImages,const uint32_t[36],classified,GUI images of the side panel's 6 x 6 goods grid by slot - 1 (-1 empty); the panel also reads the dword before (0x6a5714) for slot 0. Declared in src/s3re/game/tables.h; used by panel_*.cpp.
+0x00658a94,g_goodsGridSlot,const int8_t[],classified,"The goods grid slot (1..36) of each good, by good - 1 (the original reads 0x658a93 + good). Declared in src/s3re/game/tables.h; used by panel_drawer.cpp."
+0x006a331c,g_goodImages,const uint32_t[],classified,"A GUI image per good number (0 none, -1 no picture), for the side panel (CDrawer::DrawPanel 0x4b4d00). Declared in src/s3re/game/tables.h."
+0x006a33b4,g_goodsMapPositions,const int32_t[30][2],classified,"{column, row} cells of 30 goods on the statistics menu's page 4 (read as 16 bits). Declared in src/s3re/game/tables.h."
+0x006a34a4,g_raceGoodImages,const uint32_t[4][9],classified,"Per race nine GUI images of goods (5, 8, 15, 32, 30, 31, 35, 33, 34) for the building menu's stock places. Declared in src/s3re/game/tables.h."
+0x006a3534,g_raceSettlerImages,const uint32_t[12][4],classified,Per kind and race a GUI image of settlers / soldiers (side panel menus 3 and 5). Declared in src/s3re/game/tables.h.
+0x006a5448,g_raceRankAnimations,const uint32_t[4],classified,Per race the animation of the soldiers' ranks (side panel menu 5). Declared in src/s3re/game/tables.h.
+0x006a00a8,g_buildingNameTexts,const uint32_t[],classified,The text id of each building type's name (side panel menu 4). Declared in src/s3re/game/tables.h.
+0x006a018c,g_buildingPanelGoods,const int32_t[][4],classified,Per building type up to four goods the side panel's building menu shows with counts (probably its inputs). Declared in src/s3re/game/tables.h.
+0x0069ffd0,texts::kNoName,char[],classified,"String ""no name"" (side panel menu 6, an empty player name). Declared in src/s3re/game/texts.h."
+0x0069ffd8,texts::kFormatPlusUnsigned,char[],classified,"String ""+%u"" (the build menu's extra costs). Declared in src/s3re/game/texts.h."
+0x0069ffcc,texts::kArrow,char[],classified,"String ""-->"" (the trade grid's count 100). Declared in src/s3re/game/texts.h."

@@ -736,4 +736,7 @@ inline constexpr GameText kFormatUnsigned{0x696ba0};    // "%u"
 inline constexpr GameText kFormatPercent{0x6a57b8};     // "%u%%"
 inline constexpr GameText kFormatTwoDecimals{0x6a57b0}; // "%2.2f"
 inline constexpr GameText kFormatOneDecimal{0x6a57a8};  // "%2.1f"
+inline constexpr GameText kNoName{0x69ffd0};            // "no name" (the side panel's players, CDrawer::DrawPanel)
+inline constexpr GameText kFormatPlusUnsigned{0x69ffd8};  // "+%u" (the build menu's extra costs, CDrawer::DrawPanel)
+inline constexpr GameText kArrow{0x69ffcc};             // "-->" (the side panel's trade grid, CDrawer::DrawPanel)
 }  // namespace s3re::game::texts

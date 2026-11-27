@@ -2063,3 +2063,181 @@ SPECS += [
                   0x005bf050: (3, "thiscall", "probe", ms_lock_effect,                         # CSurface::Lock
                                lambda m, ecx, a: (a[0], a[2], bytes(m.guest_read(a[1], 0x6c))))}),
 ]
+
+
+# -- CDrawer::DrawPanel (panel_drawer*.cpp, wip/panel-r7) --------------------
+# Bounded spec of the 71 KB panel drawer (policy for large functions: the
+# in-process CDrawer_DrawPanel_* tests carry the evidence; this one runs
+# the original bytes and ours on random panel states). The drawer at world
+# 0, the draw data at PANEL_DATA with the menu, page and index-like values set
+# by panel_presets (the rest lazily random); every drawing callee is probed:
+# the GUI image getter writes a fake image, the animation getters the image
+# list PANEL_LIST (count byte small), DrawGuiImage / DrawSprite /
+# DrawColorIndexed are recorded by the image and the contents of their
+# stack temporaries (a clip in the world by its address), the text helpers,
+# bars, PutPixel16 and PackColour as probes, DrawText / DrawTextF by their
+# strings. Point16, ListImage(Checked), BuildingAnimationSlot and the
+# std::string members run (operator new is the emulator's allocator).
+PANEL_DATA = 0x100000
+PANEL_LIST = SCRATCH
+PANEL_TEXTS = SCRATCH + 0x800
+
+
+def panel_word(machine, address):
+    return struct.unpack("<I", machine.guest_read(address, 4))[0]
+
+
+def panel_clip(machine, address):
+    if WORLD_BASE <= address < WORLD_BASE + 0x100000:
+        return ("world", address)
+    return struct.unpack("<4I", machine.guest_read(address, 16))
+
+
+def panel_cstring(machine, address):
+    return machine.guest_read(address, 64).split(bytes(1))[0] if address else None
+
+
+def panel_string(machine, address):
+    pointer, length = struct.unpack("<II", machine.guest_read(address + 4, 8))
+    return (length, machine.guest_read(pointer, min(length, 64)) if pointer else None)
+
+
+def panel_this_word(machine):
+    """The dword at ECX: the GfxDword a draw method is called on (a stack
+    temporary, so recorded by its value; the probes are "stdcall" so that
+    ECX itself is not recorded)."""
+    from unicorn.x86_const import UC_X86_REG_ECX
+    return panel_word(machine, machine.uc.reg_read(UC_X86_REG_ECX))
+
+
+def panel_gui_out(m, ecx, args, h):
+    m.guest_write(args[0], struct.pack("<I", (args[1] * 7 + (args[2] << 24)) & 0xFFFFFFFF))
+    return args[0]
+
+
+def panel_list_out(m, ecx, args, h):
+    m.guest_write(args[0], struct.pack("<I", WORLD_BASE + PANEL_LIST))
+    return args[0]
+
+
+PANEL_CALLEES = {
+    0x005faca0: (3, "thiscall", "probe", panel_gui_out, lambda m, ecx, a: (a[1], a[2])),  # GuiImagePointerAt
+    0x005f64c0: (7, "stdcall", lambda h: 0, None, lambda m, ecx, a: (panel_this_word(m), *a)),  # DrawGuiImage
+    0x005faaf0: (2, "thiscall", "probe", panel_list_out, lambda m, ecx, a: (a[1],)),  # AnimationPointer
+    0x005fab50: (2, "thiscall", "probe", panel_list_out, lambda m, ecx, a: (a[1],)),  # ColorIndexedAnimationPointer
+    0x005fac10: (2, "thiscall", "probe"),  # PalettePointer
+    0x005fadb0: (5, "stdcall", lambda h: 0, None,  # GfxDword::DrawSprite
+                 lambda m, ecx, a: (panel_this_word(m), a[0], panel_word(m, a[1]), panel_clip(m, a[2]), a[3], a[4])),
+    0x005fc5f0: (4, "stdcall", lambda h: 0, None,  # GfxDword::DrawColorIndexed
+                 lambda m, ecx, a: (panel_this_word(m), a[0], panel_word(m, a[1]), panel_clip(m, a[2]), a[3])),
+    0x004d65e0: (4, "thiscall", "probe"),   # ClearTextRect
+    0x004d6740: (4, "thiscall", "probe"),   # BlitTextRect
+    0x004d6a30: (3, "thiscall", "probe"),   # PanelText
+    0x004d6b10: (3, "thiscall", "probe"),   # PanelTextFont1
+    0x004d6bf0: (6, "thiscall", lambda h: 0, None,  # PanelString (the by-value string by its contents)
+                 lambda m, ecx, a: (a[0], a[1], a[4], m.guest_read(a[3], min(a[4], 64)) if a[3] else None)),
+    0x004d6dd0: (4, "thiscall", "probe"),   # PanelTextArg
+    0x004d6eb0: (4, "thiscall", "probe"),   # PanelTextIndentedArg
+    0x004d6f90: (3, "thiscall", "probe"),   # PanelTextLeftHalf
+    0x004d7070: (3, "thiscall", "probe"),   # PanelTextRightHalf
+    0x004d7150: (3, "thiscall", "probe"),   # PanelNumber
+    0x004d7230: (4, "thiscall", lambda h: h % 9),  # PanelHundredths
+    0x004d7390: (3, "thiscall", "probe"),   # PanelPercent
+    0x004d7470: (4, "thiscall", "probe"),   # PanelTextAt
+    0x004d7550: (4, "thiscall", "probe"),   # PanelTextAtFont1
+    0x004d7630: (2, "thiscall", lambda h: 0, None, lambda m, ecx, a: (a[0], panel_cstring(m, a[1]))),  # PanelCaption
+    0x004d78d0: (5, "thiscall", "probe"),   # PanelTextAtArg
+    0x004d79c0: (6, "thiscall", "probe"),   # Render::DrawValueBar
+    0x004d7bd0: (3, "thiscall", "probe"),   # DrawStatisticsBar
+    0x004c7ac0: (3, "thiscall", "probe"),   # Render::PutPixel16
+    0x004c7b00: (3, "stdcall", lambda h: 0xF800),  # Render::PackColour (ECX not used)
+    0x004c7ab0: (1, "thiscall", lambda h: h & 3),  # Render::Entry204
+    0x004a8090: (5, "thiscall", lambda h: 0, None,  # CTextSurface::DrawText
+                 lambda m, ecx, a: (a[1], panel_clip(m, a[2]), a[3], panel_string(m, a[4]))),
+    0x004a87d0: (7, "cdecl", lambda h: 0, None,  # CTextSurface::DrawTextF(self, result, font, rect, flags, format, value)
+                 lambda m, ecx, a: (a[0], a[2], panel_clip(m, a[3]), a[4], panel_cstring(m, a[5]), a[6])),
+}
+
+
+def panel_value(rng):
+    return rng.choice([0, 0xFFFFFFFF, 0xFF, 0xFE, rng.randrange(4), rng.randrange(40), rng.randrange(200), 100,
+                       rng.randrange(12), rng.randrange(12)])
+
+
+PANEL_TEXT_SAMPLES = [b"c1", b"Lager", b"x"]
+
+
+def panel_presets(rng, pool, args):
+    d = PANEL_DATA
+    fields = [(d + offset, panel_value(rng), 4) for offset in range(0x88, 0x264, 4)]
+    fields += [(d + 0x40, 1 if rng.random() < 0.75 else rng.randrange(3), 4),
+               (d + 0x60, rng.randrange(14), 4), (d + 0x64, rng.randrange(6), 4), (d + 0x68, rng.randrange(14), 4),
+               (d + 0x6c, rng.randrange(6), 4), (d + 0x74, rng.randrange(20), 4), (d + 0x78, rng.randrange(2), 4),
+               (d + 0x7c, rng.randrange(6), 4), (d + 0x80, rng.randrange(38), 4), (d + 0x84, rng.randrange(38), 4)]
+    buttons = rng.randrange(16)
+    fields += [(d + 0x88, buttons, 4), (d + 0x8c, buttons if rng.random() < 0.5 else rng.randrange(16), 4),
+               (d + 0x94, 4 if rng.random() < 0.1 else rng.randrange(4), 4)]
+    kind = rng.choice([15, 16, 18, 1, 12, 13, 19, 26, 31, 47, 7, 2]) if rng.random() < 0.5 else rng.randrange(57)
+    owner = rng.randrange(5)
+    fields += [(d + 0xa4, kind, 4), (d + 0xa8, owner, 4),
+               (d + 0x98, owner if rng.random() < 0.67 else rng.randrange(5), 4),
+               (d + 0xac, 0xFF if rng.random() < 0.25 else rng.randrange(4), 4),
+               (d + 0xb0, 0 if rng.random() < 0.67 else rng.randrange(3), 4), (d + 0x194, rng.randrange(3), 4)]
+    fields += [(d + 0xfc + 4 * i, rng.randrange(40), 4) for i in range(7)]
+    fields += [(d + 0x2ec, rng.randrange(38), 4), (d + 0x4f0, 0 if rng.random() < 0.17 else 1 + rng.randrange(120), 4)]
+    fields += [(d + 0x2f0 + 2 * i, rng.randrange(60), 2) for i in range(256)]
+    fields += [(d + 0x4f6 + 2 * i, rng.randrange(200), 2) for i in range(4)]
+    fields += [(d + 0x4ff, rng.randrange(2), 1)]
+    for k, text in enumerate(PANEL_TEXT_SAMPLES):
+        fields += [(PANEL_TEXTS + 0x20 * k + i, b, 1) for i, b in enumerate(text + bytes(1))]
+    for k in range(16):  # the caption strings: allocator, pointer, length, capacity
+        base = d + 0xc65c0 + 0x10 * k
+        if rng.random() < 0.67:
+            t = rng.randrange(3)
+            fields += [(base + 4, WORLD_BASE + PANEL_TEXTS + 0x20 * t, 4), (base + 8, len(PANEL_TEXT_SAMPLES[t]), 4)]
+        else:
+            fields += [(base + 4, 0, 4), (base + 8, 0, 4)]
+    # Biased values for the rarer branches: menu 4's stock places and the
+    # race pictures by +0xc0, the goods map's search (+0xb0.. a permutation
+    # of good numbers), menu 3 page 3's choices, menu 5's empty groups.
+    r = rng.random()
+    if r < 0.2:
+        places = [0, 5, 8, 15, 30, 31, 32, 33, 34, 35, 0xFF, 0xFE, 7]
+        fields += [(d + offset, rng.choice(places), 4) for offset in range(0xd8, 0x100, 4)]
+    elif r < 0.35:
+        goods = list(range(1, 37))
+        rng.shuffle(goods)
+        fields += [(d + 0xb0 + 4 * i, g, 4) for i, g in enumerate(goods)]
+    elif r < 0.5:
+        fields += [(d + offset, rng.choice([0, 1, 10, 11]), 4) for offset in (0xb0, 0xb4, 0xb8)]
+    elif r < 0.6:
+        fields += [(d + offset, 0, 4) for offset in range(0xa4, 0xdc, 4)]
+    if rng.random() < 0.4:
+        fields += [(d + 0xc0, rng.choice([0x10, 0x20, 0x30, 0x40]) | rng.choice([0, 0x100]), 4),
+                   (d + 0xc4, rng.choice([0, 1, 3, 0x1e]), 4)]
+    if rng.random() < 0.2:
+        fields += [(d + 0xa4, rng.choice([1, 15, 16, 18]), 4)]
+    fields += [(PANEL_LIST + 7, rng.randrange(10), 1)]
+    fields += [(PANEL_LIST + 8 + 4 * i, 16 * (1 + rng.randrange(500)), 4) for i in range(64)]
+    fields += [(0xf8, rng.randrange(3), 4), (0xfc, rng.randrange(3), 4)]  # the drawer's redraw flags
+    return fields
+
+
+def panel_globals(rng, pool, args):
+    return [(0x00730F38, rng.randrange(3, 6), 4), (0x00730F3C, rng.randrange(64), 4),
+            (0x00730F40, rng.randrange(64), 4), (0x00730F08, rng.randrange(1, 4), 4),
+            (0x00730F0C, rng.randrange(640, 1025), 4), (0x00730F10, rng.randrange(480, 769), 4),
+            (0x00730F2C, rng.randrange(21), 4), (0x00730F30, rng.randrange(21), 4),
+            (0x00730F34, rng.randrange(100, 231), 4), (0x00730F58, rng.randrange(3), 4),
+            (0x00730F5C, rng.randrange(2), 4), (0x00730F60, rng.randrange(3), 4),
+            (0x007DFDB0, rng.choice([0, 55, 67, 3]), 4), (0x007DEB49, rng.randrange(2), 1),
+            (0x007ACFA4, rng.randrange(20), 4)]
+
+
+SPECS += [
+    Spec("CDrawer_DrawPanel", 0x004b4d00, "thiscall", [one_of(WORLD_BASE + PANEL_DATA)],
+         presets=panel_presets, globals=panel_globals, callees=PANEL_CALLEES, eax_mask=0, case_scale=4),
+    Spec("CDrawer_BuildingAnimationSlot", 0x004b1a00, "thiscall",
+         [lambda rng, pool: rng.choice([rng.randrange(60), rng.getrandbits(32)])],
+         cover_until=0x004b1bc1),  # the alignment and the jump table 0x4b1bc4 follow the last ret
+]

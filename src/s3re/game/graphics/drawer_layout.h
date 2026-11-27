@@ -72,14 +72,21 @@ struct CDrawer {
     void* window;                                     // +0x00c the game window (SetDisplayMode sends it 0x804)
     std::uint8_t unk010[0x7c - 0x10];
     std::uint8_t has_surfaces;                        // +0x07c surfaces exist (SetDisplayMode releases and recreates them)
-    std::uint8_t unk07d[0x90 - 0x7d];
+    std::uint8_t unk07d[0x80 - 0x7d];
+    std::uint8_t surface_descriptor;                  // +0x080 the start of the descriptor of the draw surface the
+                                                      //        GfxDword draw methods get (pitch +0x90, pixels +0xa4)
+    std::uint8_t unk081[0x90 - 0x81];
     std::int32_t pitch;                               // +0x090 bytes per row of the surfaces below
     std::uint8_t unk094[0xa4 - 0x94];
     std::uint16_t* pixels_a4;                         // +0x0a4 a locked 16-bit surface (statistics bars)
     std::uint8_t unk0a8[0xec - 0xa8];
     std::uint16_t* pixels_ec;                         // +0x0ec another one (debug text glyphs)
     std::int32_t unk0f0;                              // +0x0f0 set to -1 by ApplyScreenLayout 0x4c6d40
-    std::uint8_t unk0f4[0x20c - 0xf4];
+    std::uint8_t unk0f4[0xf8 - 0xf4];
+    std::int32_t panel_redraw;                        // +0x0f8 1: the side panel is drawn again next frame
+                                                      //        (CDrawer::DrawPanel 0x4b4d00)
+    std::int32_t panel_buttons_redraw;                // +0x0fc 1: the buttons below the panel are drawn again
+    std::uint8_t unk100[0x20c - 0x100];
     DrawQueue<ShadowRecord, 4000> shadows;            // +0x00020c
     DrawQueue<SpriteRecord, 8000> sprites;            // +0x014260
     DrawQueue<ColourRecord, 4000> colour_layers;      // +0x04b534
@@ -115,6 +122,9 @@ static_assert(sizeof(void*) == 4, "32-bit build only");
 static_assert(offsetof(CDrawer, window) == 0xc);
 static_assert(offsetof(CDrawer, has_surfaces) == 0x7c);
 static_assert(offsetof(CDrawer, unk0f0) == 0xf0);
+static_assert(offsetof(CDrawer, surface_descriptor) == 0x80);
+static_assert(offsetof(CDrawer, panel_redraw) == 0xf8);
+static_assert(offsetof(CDrawer, panel_buttons_redraw) == 0xfc);
 static_assert(offsetof(CDrawer, pitch) == 0x90);
 static_assert(offsetof(CDrawer, pixels_a4) == 0xa4);
 static_assert(offsetof(CDrawer, pixels_ec) == 0xec);

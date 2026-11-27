@@ -795,6 +795,31 @@ Fonts"), +0x7c/+0x80 the key/value slot used for lookups, +0x84 HBITMAP
 of a top-down 1-bit DIB section, +0x88 its bits, +0x8c pitch (dword
 aligned), +0x90 busy byte (Lock / DrawText). Conf.: V.
 
+## Draw data side panel values (DrawData +0x40..+0x500; wip/panel-r7)
+
+Read by CDrawer::DrawPanel 0x4b4d00 (panel_drawer*.cpp,
+draw_data_layout.h). +0x40 redraw_panel (1: draw the panel; the drawer's
++0xf8 draws it once more), +0x60 the menu 1..12 (1 build, 2 statistics,
+3 settlers, 4 selected building, 5 soldiers, 6 players, 7..12 texts),
++0x64 / +0x68 the build menu's page and chosen item, +0x6c / +0x7c the
+pages of menus 2 / 3, +0x74 the page of menus 4, 5 and 7 (menu 4 sets it
+to 14 for types 31, 47, 48, 50), +0x78 menu 5 page 1 bars off, +0x80 /
++0x84 marked slots, +0x88 the four buttons below the panel (bits 0..3,
+pressed), +0x8c their last-drawn state (DrawPanel writes -1 when it draws
+the panel; the drawer's +0xfc draws them once more after a change),
++0x90 menu 8's text id, +0x94 the race (0..3; picks the race GUI files 14
+/ 24 / 34 / 44), +0x98 the local player, +0xa4 menu 4's building type
+(and other menus' first value), +0xa8 its owner, +0xac its race (menu 4)
+or chosen good, +0xb0.. per-menu counts. The 6 x 6 goods grid of menus 2,
+3, 4 reads +0xa4 + 4 slot (counts) and +0x134 + 4 slot (available),
+menu 4 page 18 +0xb0 + 4 slot and +0x140 + 4 slot, menu 6 20 rows of 12
+bytes at +0xa4 (shown, icon / 2, tick), +0x194 its page. Menu 3 page 4:
++0x2ec the chosen good 1..36, +0x2f0 its history (256 uint16), +0x4f0 the
+scale, +0x4f6 four marks (uint16); +0x4ff menu 11's third column flag;
++0xc65c0 eight pairs of std::string captions (menu 7 page 2). Most
+meanings are guesses from what is drawn. Conf.: V (layout as read), G
+(meaning).
+
 ## Draw cell (48 bytes, 130 x 130 at DrawData +0x500, [column][row])
 
 The visible part of the map in the draw data (filled by PrepareDrawData
