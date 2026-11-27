@@ -62,7 +62,16 @@ inputs our debug build needs more for, `Spec.case_scale` runs N times
 `--cases` (UpdateSettlers: 12, one job family per case), and `Spec.ignore_bytes` leaves out output bytes that provably hold
 each function's own stack leftovers (padding of a copied stack
 temporary; say why at the spec and add a self-test pairing that differs
-next to them). GDI text functions (SelectObject, GetTextExtentPoint32A, SetBkMode, SetTextColor, SetBkColor, TextOutA; texts recorded by contents, sizes drawn per call) and Enter/LeaveCriticalSection are API probes as well (session 58; the in-process counterpart is test/fake_gdi.h). InterlockedExchange (stores and returns the old value), SendMessageA and DeleteCriticalSection are API probes as well (wip/logic-r4). InitializeCriticalSection, ShowWindow, ResumeThread, PeekMessageA (its MSG buffer by presence) and CoUninitialize are API probes since wip/menus-r5. timeGetTime and Sleep are probed too (read timeGetTime
+next to them). GDI text functions (SelectObject, GetTextExtentPoint32A, SetBkMode, SetTextColor, SetBkColor, TextOutA; texts recorded by contents, sizes drawn per call) and Enter/LeaveCriticalSection are API probes as well (session 58; the in-process counterpart is test/fake_gdi.h). InterlockedExchange (stores and returns the old value), SendMessageA and DeleteCriticalSection are API probes as well (wip/logic-r4). InitializeCriticalSection, ShowWindow, ResumeThread, PeekMessageA (its MSG buffer by presence) and CoUninitialize are API probes since wip/menus-r5. wip/text-r6 added the text-surface GDI calls (CreateCompatibleDC,
+DeleteDC, GdiFlush, DrawTextA with its rect and text by contents,
+GetStockObject, CreateFontIndirectA and CreateDIBSection recording their
+structures, GetDC, ReleaseDC), InterlockedIncrement/Decrement (the CRT's
+locale counters in wcstombs), and failures of SelectObject (null) and
+SetTextColor/SetBkColor (CLR_INVALID) about one call in sixteen. CRT
+code that formats floating point (sprintf "%f") needs the conversion
+table `_cfltcvt_tab` 0x7a5d24 filled as the CRT start-up does
+(`CRT_FLOAT_CONVERSIONS` in specs/graphics.py; otherwise it reaches
+_fptrap and GetModuleFileNameA). timeGetTime and Sleep are probed too (read timeGetTime
 through S3.EXE's import 0x655358, which in-process tests can point at a
 fake clock). COM methods: a `Spec.virtuals` entry `(count, pointers,
 {"com": True, "returns": f})` records the call without ECX (stdcall,

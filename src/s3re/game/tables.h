@@ -285,6 +285,12 @@ inline constexpr GameGlobal<char[1]> g_stringNullBuffer{0x6553a0};
 // (a zero word; its "count byte" 0x655dc7 is read and can be incremented
 // by assign) and npos.
 inline constexpr GameGlobal<std::uint16_t[1]> g_wstringNullBuffer{0x655dc8};
+// The message texts' rects in cells (CDrawer::RenderMessageTexts 0x4d82b0):
+// left, top, right, bottom; tops and bottoms count from the display's
+// bottom edge. The header {50, -10, 195, -5}; the first line {50, -21, 195,
+// -15}, each further line 6 cells higher.
+inline constexpr GameGlobal<const std::int32_t[4]> g_messageHeaderCells{0x658ab8};
+inline constexpr GameGlobal<const std::int32_t[4]> g_messageLineCells{0x658ac8};
 inline constexpr GameGlobal<const volatile std::uint32_t> g_wstringNpos{0x655dcc};
 // The wait times (ms) of Win32::GetTimeout 0x60df50 and DirectX::GetTimeout
 // 0x5b8c10: per kind {normal, with -debug} (INFINITE = 0xffffffff).

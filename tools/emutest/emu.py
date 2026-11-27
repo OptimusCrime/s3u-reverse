@@ -466,8 +466,10 @@ def _api_counted_text(machine, address, length):
 
 
 def _api_select_object(machine, uc, args):
-    """SelectObject(dc, object): a random previous object."""
-    return (_api_hash(machine, 0x5E100000) >> 8) & 0xFFFFFFFF, ("SelectObject", *args)
+    """SelectObject(dc, object): a random previous object; null (failure)
+    about one call in sixteen (wip/text-r6)."""
+    h = _api_hash(machine, 0x5E100000)
+    return (0 if (h >> 44) & 15 == 0 else (h >> 8) & 0xFFFFFFFF), ("SelectObject", *args)
 
 
 def _api_get_text_extent_point(machine, uc, args):
@@ -491,9 +493,48 @@ def _api_set_bk_mode(machine, uc, args):
 
 def _api_set_colour(name, salt):
     def handler(machine, uc, args):
-        """SetTextColor / SetBkColor(dc, colour): a random previous colour."""
-        return (_api_hash(machine, salt) >> 8) & 0xFFFFFF, (name, *args)
+        """SetTextColor / SetBkColor(dc, colour): a random previous colour;
+        CLR_INVALID about one call in sixteen (wip/text-r6)."""
+        h = _api_hash(machine, salt)
+        return (0xFFFFFFFF if (h >> 44) & 15 == 0 else (h >> 8) & 0xFFFFFF), (name, *args)
     return handler
+
+
+def _api_create_font(machine, uc, args):
+    """CreateFontIndirectA(logFont) (wip/text-r6): records the 60 bytes of
+    the LOGFONTA; a font handle, null about one call in four."""
+    h = _api_hash(machine, 0xF0700000)
+    font = bytes(machine.guest_read(args[0], 60)) if args[0] else None
+    return (0 if _api_fails(h) else _api_value(h) | 1), ("CreateFontIndirectA", font)
+
+
+def _api_create_dib_section(machine, uc, args):
+    """CreateDIBSection(dc, info, usage, bits*, section, offset)
+    (wip/text-r6): records the 48 bytes of the BITMAPINFO; a bitmap handle
+    and a bits pointer written to *bits, or null (about one call in four;
+    *bits then sometimes null, sometimes untouched)."""
+    dc, info, usage, bits, section, offset = args
+    h = _api_hash(machine, 0xD1B00000)
+    header = bytes(machine.guest_read(info, 48)) if info else None
+    record = ("CreateDIBSection", dc, header, usage, bits, section, offset)
+    if _api_fails(h):
+        if bits and (h >> 40) & 1:
+            machine.guest_write(bits, bytes(4))
+        return 0, record
+    if bits:
+        machine.guest_write(bits, struct.pack("<I", (h >> 24) & 0xFFFFFFFF))
+    return _api_value(h) | 1, record
+
+
+def _api_draw_text(machine, uc, args):
+    """DrawTextA(dc, text, length, rect, format) (wip/text-r6): records the
+    text by contents and the rect's four values; returns a text-like
+    height, sometimes any value."""
+    dc, text, length, rect, fmt = args
+    h = _api_hash(machine, 0xD7000000)
+    box = struct.unpack("<4I", machine.guest_read(rect, 16)) if rect else None
+    height = (h >> 8) & 0xFFFFFFFF if (h >> 40) & 7 == 0 else ((h >> 8) & 0xFF) % 61
+    return height, ("DrawTextA", dc, _api_counted_text(machine, text, length), length, box, fmt)
 
 
 def _api_text_out(machine, uc, args):
@@ -665,6 +706,17 @@ def _api_interlocked_exchange(machine, uc, args):
     return old, ("InterlockedExchange", target, value)
 
 
+def _api_interlocked_step(name, step):
+    def handler(machine, uc, args):
+        """InterlockedIncrement / InterlockedDecrement(target) (wip/text-r6:
+        the CRT's locale counters in wcstombs): adds `step`, returns the new
+        value (the target lies in S3.EXE's data, the same for both)."""
+        value = (struct.unpack("<I", bytes(machine.guest_read(args[0], 4)))[0] + step) & 0xFFFFFFFF
+        machine.guest_write(args[0], struct.pack("<I", value))
+        return value, (name, args[0])
+    return handler
+
+
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
 # record holds what the call saw (rectangle contents, not pointers, which
 # differ between the original's and our stack frames).
@@ -713,6 +765,8 @@ API_HANDLERS = {
     "DestroyWindow": (1, _api_success("DestroyWindow", 0x5E00000A)),
     "PostMessageA": (4, _api_success("PostMessageA", 0x5E00000B)),
     "InterlockedExchange": (2, _api_interlocked_exchange),
+    "InterlockedIncrement": (1, _api_interlocked_step("InterlockedIncrement", 1)),
+    "InterlockedDecrement": (1, _api_interlocked_step("InterlockedDecrement", -1)),
     "SendMessageA": (4, _api_success("SendMessageA", 0x5E00000D)),
     "DeleteCriticalSection": (1, _api_critical_section("DeleteCriticalSection")),
     "WaitForSingleObject": (2, _api_wait_for_single_object),
@@ -723,6 +777,15 @@ API_HANDLERS = {
     "SetTextColor": (2, _api_set_colour("SetTextColor", 0x7C000000)),
     "SetBkColor": (2, _api_set_colour("SetBkColor", 0xBC000000)),
     "TextOutA": (5, _api_text_out),
+    "CreateCompatibleDC": (1, _api_success("CreateCompatibleDC", 0x5E00000E)),
+    "DeleteDC": (1, _api_success("DeleteDC", 0x5E00000F)),
+    "GdiFlush": (0, _api_success("GdiFlush", 0x5E000010)),
+    "DrawTextA": (5, _api_draw_text),
+    "GetStockObject": (1, _api_success("GetStockObject", 0x5E000011)),
+    "CreateFontIndirectA": (1, _api_create_font),
+    "GetDC": (1, _api_success("GetDC", 0x5E000012)),
+    "ReleaseDC": (2, _api_success("ReleaseDC", 0x5E000013)),
+    "CreateDIBSection": (6, _api_create_dib_section),
     "EnterCriticalSection": (1, _api_critical_section("EnterCriticalSection")),
     "InitializeCriticalSection": (1, _api_critical_section("InitializeCriticalSection")),
     "ShowWindow": (2, _api_success("ShowWindow", 0x5E00000C)),

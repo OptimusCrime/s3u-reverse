@@ -769,6 +769,32 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
 
 ---
 
+## Draw data message texts (DrawData +0xc66c0..+0xc6908)
+
+Read by CDrawer::RenderMessageTexts 0x4d82b0 (wip/text-r6;
+draw_data_layout.h), filled by PrepareDrawData 0x51f110 (0x51f88c..). A
+header at +0xc66c0 (0x18 bytes: std::wstring text, +0x10 a dword
+PrepareDrawData sets, +0x14 shown byte) and 20 lines at +0xc66d8 (0x1c
+bytes: wstring, +0x10 the text is drawn only when not 0, +0x14 unknown,
++0x18 shown byte). Probably the chat and game messages at the bottom of
+the screen (rects: g_messageHeaderCells / g_messageLineCells 0x658ab8 /
+0x658ac8, in cells, lines 6 cells apart upwards). Conf.: V (layout as
+read), S (meaning).
+
+## CDrawer panel text fields and Dirk::CTextSurface (wip/text-r6)
+
+CDrawer (drawer_layout.h): +0x5f654..+0x5f660 the panel area (X, Y+24C,
+X+40C, Y+90C) and +0x5f664 g_sidebarWidth, +0x5f668 0, +0x5f66c/+0x5f670
+the display size, +0x5f694..+0x5f6b0 cleared: all set by
+CDrawer::InitPanelFonts 0x4c6f60; +0x5f684..+0x5f690 the rect of the
+panel text being drawn (left, top, right, bottom; the panel text helpers
+0x4d6a30..0x4d78d0 set and re-read it); +0x5f6e0 the Dirk::CTextSurface.
+Dirk::CTextSurface (0x94 bytes, text_surface.h): +0 vtable 0x6587f0, +0x4
+WCValSkipListDict<int, HFONT> of the fonts (ids 0, 1 and 99 "Small
+Fonts"), +0x7c/+0x80 the key/value slot used for lookups, +0x84 HBITMAP
+of a top-down 1-bit DIB section, +0x88 its bits, +0x8c pitch (dword
+aligned), +0x90 busy byte (Lock / DrawText). Conf.: V.
+
 ## Draw cell (48 bytes, 130 x 130 at DrawData +0x500, [column][row])
 
 The visible part of the map in the draw data (filled by PrepareDrawData

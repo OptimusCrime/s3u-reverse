@@ -711,4 +711,29 @@ inline constexpr GameText kGameThreadCoInitOpen{0x79df58};    // "CGameThread::~
 inline constexpr GameText kDrawBuildingFile{0x69ff80};           // "E:\Siedler3\Volker\DrawBuilding.cpp"
 inline constexpr GameText kBuildingPhaseUndefined{0x69ff60};     // "Gebäudebauphase nicht definiert" (Latin-1)
 inline constexpr GameText kBuildingPhaseUndefinedLog{0x69ffa4};  // "! Gebäudebauphase nicht definiert: %u"
+// ------------------------------------------------------------ wip/text-r6 batch
+// Dirk\Text.cpp: the VERIFY expressions of CTextSurface::DrawText and Lock.
+inline constexpr GameText kTextFile{0x69fdbc};             // "E:\Siedler3\Dirk\Text.cpp"
+inline constexpr GameText kGdiFlush{0x69ff54};             // "GdiFlush ()"
+inline constexpr GameText kDcNotNull{0x69fdb0};            // "hDC != NULL"
+inline constexpr GameText kSelectBitmap{0x69ff2c};         // "::SelectObject (hDC, hBitmap) != NULL"
+inline constexpr GameText kSetBkModeOpaque{0x69ff0c};      // "::SetBkMode (hDC, OPAQUE) != 0"
+inline constexpr GameText kSetBkColorBlack{0x69fed8};      // "::SetBkColor (hDC, RGB (0, 0, 0)) != CLR_INVALID"
+inline constexpr GameText kSetTextColorWhite{0x69fe9c};    // "::SetTextColor (hDC, RGB (255, 255, 255)) != CLR_INVALID"
+inline constexpr GameText kSelectFont{0x69fe74};           // "::SelectObject (hDC, vFonts [iFontId])"
+inline constexpr GameText kDeleteDc{0x69fe5c};             // "::DeleteDC (hDC) != 0"
+inline constexpr GameText kDefaultFontNotNull{0x697778};   // "hDefaultFont != NULL"
+inline constexpr GameText kBitmapNotNull{0x69fda0};        // "hBitmap != NULL"
+// CMouseSurface::Clear's CSurface::CheckResult name for Unlock (GetSurfaceDesc's is kDDGetSurfaceDesc).
+inline constexpr GameText kDDUnlock{0x697e7c};             // "CSurface::DDUnlock"
+// The panel fonts' faces (CDrawer::InitPanelFonts 0x4c6f60).
+inline constexpr GameText kTimesNewRoman{0x69fff0};     // "Times New Roman"
+inline constexpr GameText kArial{0x69ffe8};             // "Arial"
+inline constexpr GameText kSmallFonts{0x69ffdc};        // "Small Fonts"
+inline constexpr GameText kMsSansSerif{0x69742c};       // "MS Sans Serif"
+// The panel number formats (CDrawer::PanelNumber, PanelPercent, PanelHundredths; text_panels.cpp).
+inline constexpr GameText kFormatUnsigned{0x696ba0};    // "%u"
+inline constexpr GameText kFormatPercent{0x6a57b8};     // "%u%%"
+inline constexpr GameText kFormatTwoDecimals{0x6a57b0}; // "%2.2f"
+inline constexpr GameText kFormatOneDecimal{0x6a57a8};  // "%2.1f"
 }  // namespace s3re::game::texts

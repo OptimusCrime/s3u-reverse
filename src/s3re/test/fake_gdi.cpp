@@ -21,7 +21,23 @@ enum CallId : std::uint32_t {
     kCallSetTextColor,
     kCallSetBkColor,
     kCallTextOut,
+    kCallCreateCompatibleDC,
+    kCallDeleteDC,
+    kCallGdiFlush,
+    kCallDrawText,
+    kCallGetStockObject,
+    kCallCreateFontIndirect,
+    kCallGetDC,
+    kCallReleaseDC,
+    kCallCreateDIBSection,
 };
+
+// With failures on: true for about one call in eight.
+bool Fails() {
+    return g_active->failures_ && g_active->rng_.Chance(1, 8);
+}
+
+constexpr std::uint32_t kClrInvalid = 0xffffffff;
 
 void Log(std::initializer_list<std::uint32_t> values) {
     g_active->log_.insert(g_active->log_.end(), values);
@@ -47,6 +63,9 @@ void LogText(const char* text, std::int32_t length) {
 
 void* __stdcall FakeSelectObject(void* dc, void* object) {
     Log({kCallSelectObject, U(dc), U(object)});
+    if (Fails()) {
+        return nullptr;
+    }
     return reinterpret_cast<void*>(g_active->rng_.Next32());
 }
 
@@ -71,16 +90,25 @@ int __stdcall FakeGetTextExtentPoint32(void* dc, const char* text, std::int32_t 
 
 std::int32_t __stdcall FakeSetBkMode(void* dc, std::int32_t mode) {
     Log({kCallSetBkMode, U(dc), static_cast<std::uint32_t>(mode)});
+    if (Fails()) {
+        return 0;
+    }
     return g_active->rng_.Range(0, 2);
 }
 
 std::uint32_t __stdcall FakeSetTextColor(void* dc, std::uint32_t colour) {
     Log({kCallSetTextColor, U(dc), colour});
+    if (Fails()) {
+        return kClrInvalid;
+    }
     return g_active->rng_.Next32() & 0xffffff;
 }
 
 std::uint32_t __stdcall FakeSetBkColor(void* dc, std::uint32_t colour) {
     Log({kCallSetBkColor, U(dc), colour});
+    if (Fails()) {
+        return kClrInvalid;
+    }
     return g_active->rng_.Next32() & 0xffffff;
 }
 
@@ -89,6 +117,96 @@ int __stdcall FakeTextOut(void* dc, std::int32_t x, std::int32_t y, const char* 
          static_cast<std::uint32_t>(length)});
     LogText(text, length);
     return g_active->rng_.Chance(1, 8) ? 0 : 1;
+}
+
+void* __stdcall FakeCreateCompatibleDC(void* dc) {
+    Log({kCallCreateCompatibleDC, U(dc)});
+    if (Fails()) {
+        return nullptr;
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
+}
+
+int __stdcall FakeDeleteDC(void* dc) {
+    Log({kCallDeleteDC, U(dc)});
+    return Fails() ? 0 : 1;
+}
+
+int __stdcall FakeGdiFlush() {
+    Log({kCallGdiFlush});
+    return Fails() ? 0 : 1;
+}
+
+// DrawTextA(dc, text, length, rect, format): logs the rect and returns a
+// text-like height (sometimes anything).
+std::int32_t __stdcall FakeDrawText(void* dc, const char* text, std::int32_t length, void* rect,
+                                    std::uint32_t format) {
+    Log({kCallDrawText, U(dc), static_cast<std::uint32_t>(length), format});
+    LogText(text, length);
+    if (rect != nullptr) {
+        std::uint32_t r[4];
+        std::memcpy(r, rect, sizeof(r));
+        Log({r[0], r[1], r[2], r[3]});
+    }
+    Rng& rng = g_active->rng_;
+    return rng.Chance(1, 8) ? static_cast<std::int32_t>(rng.Next32()) : rng.Range(0, 60);
+}
+
+void* __stdcall FakeGetStockObject(std::int32_t object) {
+    Log({kCallGetStockObject, static_cast<std::uint32_t>(object)});
+    if (Fails()) {
+        return nullptr;
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
+}
+
+// CreateFontIndirectA(logFont): logs the 60 bytes of the LOGFONTA.
+void* __stdcall FakeCreateFontIndirect(const void* logFont) {
+    Log({kCallCreateFontIndirect});
+    std::uint32_t words[15];
+    std::memcpy(words, logFont, sizeof(words));
+    for (std::uint32_t word : words) {
+        Log({word});
+    }
+    if (g_active->rng_.Chance(1, 8)) {
+        return nullptr;
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
+}
+
+void* __stdcall FakeGetDC(void* window) {
+    Log({kCallGetDC, U(window)});
+    if (Fails()) {
+        return nullptr;
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
+}
+
+int __stdcall FakeReleaseDC(void* window, void* dc) {
+    Log({kCallReleaseDC, U(window), U(dc)});
+    return g_active->rng_.Range(0, 1);
+}
+
+// CreateDIBSection(dc, info, usage, bits*, section, offset): logs the 48
+// bytes of the BITMAPINFO; on success writes a fake bits pointer.
+void* __stdcall FakeCreateDIBSection(void* dc, const void* info, std::uint32_t usage, void** bits, void* section,
+                                     std::uint32_t offset) {
+    Log({kCallCreateDIBSection, U(dc), usage, bits != nullptr ? 1u : 0u, U(section), offset});
+    std::uint32_t words[12];
+    std::memcpy(words, info, sizeof(words));
+    for (std::uint32_t word : words) {
+        Log({word});
+    }
+    if (Fails()) {
+        if (bits != nullptr && g_active->rng_.Chance(1, 2)) {
+            *bits = nullptr;
+        }
+        return nullptr;
+    }
+    if (bits != nullptr) {
+        *bits = reinterpret_cast<void*>(g_active->rng_.Next32());
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
 }
 
 struct Slot {
@@ -103,6 +221,15 @@ const Slot kSlots[] = {
     {g_importSetTextColor.address(), reinterpret_cast<const void*>(&FakeSetTextColor)},
     {g_importSetBkColor.address(), reinterpret_cast<const void*>(&FakeSetBkColor)},
     {g_importTextOutA.address(), reinterpret_cast<const void*>(&FakeTextOut)},
+    {g_importCreateCompatibleDC.address(), reinterpret_cast<const void*>(&FakeCreateCompatibleDC)},
+    {g_importDeleteDC.address(), reinterpret_cast<const void*>(&FakeDeleteDC)},
+    {g_importGdiFlush.address(), reinterpret_cast<const void*>(&FakeGdiFlush)},
+    {g_importDrawTextA.address(), reinterpret_cast<const void*>(&FakeDrawText)},
+    {g_importGetStockObject.address(), reinterpret_cast<const void*>(&FakeGetStockObject)},
+    {g_importCreateFontIndirectA.address(), reinterpret_cast<const void*>(&FakeCreateFontIndirect)},
+    {g_importGetDC.address(), reinterpret_cast<const void*>(&FakeGetDC)},
+    {g_importReleaseDC.address(), reinterpret_cast<const void*>(&FakeReleaseDC)},
+    {g_importCreateDIBSection.address(), reinterpret_cast<const void*>(&FakeCreateDIBSection)},
 };
 
 }  // namespace

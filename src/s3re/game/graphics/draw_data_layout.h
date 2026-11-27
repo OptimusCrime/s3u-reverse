@@ -8,6 +8,8 @@
 // reads are named; meanings without evidence are left as unkXXX with how
 // they are used.
 
+#include "msvc6/wstring.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -34,6 +36,26 @@ static_assert(sizeof(DrawCell) == 0x30);
 
 constexpr std::uint32_t kDrawCellRows = 130;
 
+// The message texts of the draw data (filled by PrepareDrawData 0x51f110
+// from the logic thread; drawn by CDrawer::RenderMessageTexts 0x4d82b0).
+struct DrawMessageHeader {
+    msvc6::WString text;          // +0x00 the text (16-bit characters)
+    std::uint32_t unk10;          // +0x10 set by PrepareDrawData
+    std::uint8_t shown;           // +0x14 drawn when set
+    std::uint8_t unk15[3];
+};
+static_assert(sizeof(DrawMessageHeader) == 0x18);
+
+struct DrawMessageLine {
+    msvc6::WString text;          // +0x00
+    std::uint32_t unk10;          // +0x10 the text is drawn only when not 0
+    std::uint32_t unk14;          // +0x14
+    std::uint8_t shown;           // +0x18 the line's rect is cleared (and its text drawn) when set
+    std::uint8_t unk19[3];
+};
+static_assert(sizeof(DrawMessageLine) == 0x1c);
+constexpr std::size_t kDrawMessageLines = 20;
+
 struct DrawDataView {
     std::uint8_t unk000[0x24];
     std::int32_t origin_column;   // +0x024 map column of cell column 0
@@ -55,6 +77,9 @@ struct DrawDataView {
     std::int32_t selected_row;    // +0x268
     std::uint8_t unk26c[0x500 - 0x26c];
     DrawCell cells[kDrawCellRows][kDrawCellRows];  // +0x500 [column][row]
+    std::uint8_t unkc65c0[0xc66c0 - 0xc65c0];
+    DrawMessageHeader message_header;     // +0xc66c0 the line above the messages
+    DrawMessageLine messages[kDrawMessageLines];  // +0xc66d8 (CDrawer::RenderMessageTexts 0x4d82b0)
 };
 static_assert(offsetof(DrawDataView, origin_column) == 0x24);
 static_assert(offsetof(DrawDataView, clock) == 0x48);
@@ -64,6 +89,8 @@ static_assert(offsetof(DrawDataView, unk094) == 0x94);
 static_assert(offsetof(DrawDataView, unk0a4) == 0xa4);
 static_assert(offsetof(DrawDataView, selected_column) == 0x264);
 static_assert(offsetof(DrawDataView, cells) == 0x500);
+static_assert(offsetof(DrawDataView, message_header) == 0xc66c0);
+static_assert(offsetof(DrawDataView, messages) == 0xc66d8);
 
 #pragma pack(pop)
 

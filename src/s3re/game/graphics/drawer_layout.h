@@ -86,11 +86,27 @@ struct CDrawer {
     std::int32_t ambient_left[kAmbientKinds];         // +0x05f588
     std::int32_t ambient_right[kAmbientKinds];        // +0x05f5cc
     std::int32_t ambient_count[kAmbientKinds];        // +0x05f610
-    std::uint8_t unk05f654[0x5f6b8 - 0x5f654];
+    std::int32_t panel_left;                          // +0x05f654 the panel area (CDrawer::InitPanelFonts
+    std::int32_t panel_top;                           // +0x05f658  0x4c6f60: X, Y + 24 C, X + 40 C, Y + 90 C;
+    std::int32_t panel_right;                         // +0x05f65c  C = g_uiCellSize, (X, Y) = the drawing
+    std::int32_t panel_bottom;                        // +0x05f660  origin)
+    std::int32_t unk05f664;                           // +0x05f664 set to g_sidebarWidth by InitPanelFonts
+    std::int32_t unk05f668;                           // +0x05f668 set to 0 by InitPanelFonts
+    std::int32_t unk05f66c;                           // +0x05f66c set to g_displayWidth by InitPanelFonts
+    std::int32_t unk05f670;                           // +0x05f670 set to g_displayHeight by InitPanelFonts
+    std::uint8_t unk05f674[0x5f684 - 0x5f674];
+    std::int32_t panel_text_left;                     // +0x05f684 the rect of the panel text being drawn (left,
+    std::int32_t panel_text_top;                      // +0x05f688  top, right, bottom; the text helpers
+    std::int32_t panel_text_right;                    // +0x05f68c  0x4d6a30..0x4d78d0 set it, pass it to
+    std::int32_t panel_text_bottom;                   // +0x05f690  DrawTextF and re-read it; text_panels.cpp)
+    std::int32_t unk05f694[8];                        // +0x05f694 cleared by InitPanelFonts
+    std::uint8_t unk05f6b4[0x5f6b8 - 0x5f6b4];
     void* graphics;                                   // +0x05f6b8 the CGraphicsData the sprites come from
                                                       //           (CDrawer::QueueCellObject 0x4d5a50)
     void* sound;                                      // +0x05f6bc the CSoundData of the drawing's sound effects
                                                       //           (PlayAmbientSounds 0x4c7730, CDrawer::QueueLandscapeObject 0x4d3050)
+    std::uint8_t unk05f6c0[0x5f6e0 - 0x5f6c0];
+    void* text_surface;                               // +0x05f6e0 the Dirk::CTextSurface the panel texts are drawn into
 };
 
 #pragma pack(pop)
@@ -119,6 +135,12 @@ static_assert(offsetof(CDrawer, ambient_right) == 0x5f5cc);
 static_assert(offsetof(CDrawer, ambient_count) == 0x5f610);
 static_assert(offsetof(CDrawer, graphics) == 0x5f6b8);
 static_assert(offsetof(CDrawer, sound) == 0x5f6bc);
+static_assert(offsetof(CDrawer, panel_text_left) == 0x5f684);
+static_assert(offsetof(CDrawer, panel_left) == 0x5f654);
+static_assert(offsetof(CDrawer, unk05f670) == 0x5f670);
+static_assert(offsetof(CDrawer, unk05f694) == 0x5f694);
+static_assert(offsetof(CDrawer, panel_text_bottom) == 0x5f690);
+static_assert(offsetof(CDrawer, text_surface) == 0x5f6e0);
 
 template <typename T>
 CDrawer* DrawerOf(T* self) {

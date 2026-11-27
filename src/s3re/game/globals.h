@@ -699,6 +699,33 @@ inline constexpr GameGlobal<SetBkModeImport> g_importSetBkMode{0x655054};
 inline constexpr GameGlobal<SetTextColorImport> g_importSetTextColor{0x655058};
 inline constexpr GameGlobal<SetBkColorImport> g_importSetBkColor{0x655078};
 inline constexpr GameGlobal<TextOutAImport> g_importTextOutA{0x655068};
+// wip/text-r6 batch: the text surface (Dirk\Text.cpp: CTextSurface::DrawText
+// 0x4a8090, Lock 0x4a8bd0; test/fake_gdi.h fakes them).
+using CreateCompatibleDCImport = void*(__stdcall*)(void* dc);
+using DeleteDCImport = int(__stdcall*)(void* dc);
+using GdiFlushImport = int(__stdcall*)();
+using DrawTextAImport = std::int32_t(__stdcall*)(void* dc, const char* text, std::int32_t length, void* rect,
+                                                 std::uint32_t format);
+inline constexpr GameGlobal<CreateCompatibleDCImport> g_importCreateCompatibleDC{0x65506c};
+inline constexpr GameGlobal<DeleteDCImport> g_importDeleteDC{0x655064};
+inline constexpr GameGlobal<GdiFlushImport> g_importGdiFlush{0x655080};
+inline constexpr GameGlobal<DrawTextAImport> g_importDrawTextA{0x6552ec};  // USER32.dll
+using GetStockObjectImport = void*(__stdcall*)(std::int32_t object);
+using CreateFontIndirectAImport = void*(__stdcall*)(const void* logFont);
+inline constexpr GameGlobal<GetStockObjectImport> g_importGetStockObject{0x65503c};
+inline constexpr GameGlobal<CreateFontIndirectAImport> g_importCreateFontIndirectA{0x655040};
+using GetDCImport = void*(__stdcall*)(void* window);
+using ReleaseDCImport = int(__stdcall*)(void* window, void* dc);
+using CreateDIBSectionImport = void*(__stdcall*)(void* dc, const void* info, std::uint32_t usage, void** bits,
+                                                 void* section, std::uint32_t offset);
+inline constexpr GameGlobal<GetDCImport> g_importGetDC{0x6552b4};          // USER32.dll
+inline constexpr GameGlobal<ReleaseDCImport> g_importReleaseDC{0x6552d8};  // USER32.dll
+inline constexpr GameGlobal<CreateDIBSectionImport> g_importCreateDIBSection{0x655060};
+// The critical-section imports (Win32::CCriticalSection::Enter / Leave
+// 0x60d670 / 0x60d680; they return void, EAX is passed on).
+using CriticalSectionImport = std::uint32_t(__stdcall*)(void* section);
+inline constexpr GameGlobal<CriticalSectionImport> g_importEnterCriticalSection{0x6550fc};  // KERNEL32.dll
+inline constexpr GameGlobal<CriticalSectionImport> g_importLeaveCriticalSection{0x655128};  // KERNEL32.dll
 // wip/ui-gdi batch: the dropdown whose list is open (CDropdown::OnArrowClicked
 // 0x422590 sets it; OnFocusChanged and Draw close other open lists).
 inline constexpr GameGlobal<std::uint32_t> g_openDropdown{0x7a8244};

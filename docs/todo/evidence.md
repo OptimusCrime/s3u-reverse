@@ -39,6 +39,22 @@ LOGBOOK session entry).
   (0x5b8080 resize, 0x5b8330, 0x5b8560, 0x5b69e0, 0x5b7ec0/0x5b7f40) and
   ~CDirectDrawDevice 0x5b7670 first; Render_sub_54cbd0 (the landscape
   drawing, ~2000 lines, locks the surface with CSurface::Lock) is large.
+  The panel texts are done (wip/text-r6: Dirk::CTextSurface, the CDrawer
+  text helpers 0x4d65e0..0x4d78d0, InitPanelFonts, the message texts,
+  BlitVisibleArea, WideToNarrowString); left in the frame drawer's tree:
+  Render_sub_4b4d00 (the panel drawer, 71 KB, 20,000 asm lines: ~430
+  GUI-image triples 0x5faca0 / 0x5fdab0 / 0x5f64c0 with their own stack
+  temporaries, plus calls of the panel helpers), Render_sub_4c85a0 (the
+  settler drawer, 38 KB, 11,250 instructions; its dumpbin listing desyncs
+  on a jump table, so frontier.py never lists it), Render_sub_4b26c0 (needs
+  both and 0x54cbd0), CDrawer::SetMouseCursor 0x42cb60 (its callees are
+  done now; it has a catch(...) around DrawSprite that unlocks the mouse
+  surface and rethrows, which needs an exception test), CDrawThread::Draw /
+  FetchDrawData (0x42c710 / 0x42c780). CTextSurface's constructor,
+  destructor and its font deleter 0x4a7d30 need the Watcom skip-list code
+  (0x60b9f0, 0x60bd80, the iterator), and DrawText's wide sibling caller
+  chain is done. WideToNarrowString's rejected-character path (wcstombs
+  -1: an unterminated buffer, errno through TlsGetValue) has no evidence.
 - **ExecuteCommands whole-game evidence (session 47).** Reimplemented and
   verified (in-process + emulator); the recordings contain ids 0x01, 0x03,
   0x04, 0x05, 0x09, 0x0b, 0x0c, 0x0f, 0x10, 0x11, 0xfb. Run the round-end

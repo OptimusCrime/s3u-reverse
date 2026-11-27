@@ -1443,3 +1443,623 @@ SPECS += [
          presets=qb_presets, globals=qb_globals, callees=QB_CALLEES, eax_mask=0, case_scale=3,
          exempt_blocks=(0x4b17ff,)),  # the alignment byte between the last ret and the jump table 0x4b1800
 ]
+
+
+# -- Dirk::CTextSurface (text_surface.cpp, wip/text-r6) ---------------------
+# The surface at world 0. The GDI calls are API probes (CreateCompatibleDC,
+# SelectObject, SetBkMode, SetBkColor, SetTextColor, DrawTextA, DeleteDC,
+# GdiFlush; each fails now and then the way its VERIFY tests).
+# Win32::ThrowWin32Error 0x610de0 ends the run as a throw (WIN32_THROWERS,
+# framework.py), compared with the message string's bytes, except where the
+# original's allocator byte is an uninitialized stack byte (Lock; DrawText's
+# DeleteDC check, line 0xb1): there the record leaves out byte 0. The font
+# dictionary's find 0x60bab0 and insert 0x60bbe0 (Watcom code, not ours)
+# are probed: find returns 0 (not there) or a pointer just past an HFONT
+# slot in TS_FONTS, insert always one. The blocks after a thrower call are
+# the original's never-reached clean-up of the message string.
+TS_RESULT = SCRATCH                                   # the result rect
+TS_RECT = SCRATCH + 1 * SCRATCH_SLOT_BYTES            # the rect argument (at an offset 0..255)
+TS_STRING = SCRATCH + 2 * SCRATCH_SLOT_BYTES          # a std::string
+TS_TEXT = SCRATCH + 3 * SCRATCH_SLOT_BYTES            # its characters / a format
+TS_FONTS = SCRATCH + 4 * SCRATCH_SLOT_BYTES           # HFONT slots
+TS_ARGUMENT = SCRATCH + 5 * SCRATCH_SLOT_BYTES        # a %s argument
+
+
+def ts_thrower_record(machine, ecx, args):
+    """thrower_record without the message's padding bytes 1..3 (the
+    original writes only the allocator byte, the rest is whatever its
+    frame held), and without the allocator byte too where that is an
+    uninitialized stack byte in the original (Lock line 0xd4, DrawText
+    line 0xb1)."""
+    record = thrower_record(machine, ecx, args)
+    message = record[-1]
+    if message is not None:
+        kept = message[4:] if args[0] in (0xb1, 0xd4) else message[:1] + message[4:]
+        record = record[:-1] + (kept,)
+    return record
+
+
+TS_CALLEES = {
+    0x00610de0: (3, "thiscall", "throw", None, ts_thrower_record),   # ThrowWin32Error(line, error, &message)
+    0x0060bab0: (1, "thiscall", lambda h: 0 if h & 1 else WORLD_BASE + TS_FONTS + 4 + 8 * ((h >> 4) % 8)),
+    0x0060bbe0: (1, "thiscall", lambda h: WORLD_BASE + TS_FONTS + 4 + 8 * ((h >> 4) % 8)),
+}
+
+
+def ts_rect_arg(rng, pool):
+    return WORLD_BASE + TS_RECT + rng.randrange(256)
+
+
+def ts_flags(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(128)
+
+
+def ts_font(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(6)
+
+
+def ts_string(rng, pool, args):
+    """The std::string at TS_STRING: characters at TS_TEXT (sometimes none)."""
+    length = rng.randrange(41)
+    text = bytes(rng.randrange(32, 127) for _ in range(length))
+    fields = [(TS_TEXT + i, b, 1) for i, b in enumerate(text + b"\0")]
+    pointer = 0 if rng.random() < 0.1 else WORLD_BASE + TS_TEXT
+    fields += [(TS_STRING + 4, pointer, 4), (TS_STRING + 8, length if pointer else 0, 4),
+               (TS_STRING + 12, length, 4)]
+    return fields
+
+
+TS_FORMATS = [b"", b"Holz", b"%d", b"%u / %u", b"%s: %d", b"100%%", b"%s", b"Steine %d%%", b"%x %s %u",
+              b"lang\nzweizeilig", b"%-5d|%05u"]
+
+
+TS_ARGUMENT_2 = TS_ARGUMENT + 0x100
+
+
+def ts_format_world(rng, pool, args):
+    """DrawTextF: a format at TS_TEXT (picked by args[9], an extra argument
+    vsprintf never reads) and texts at TS_ARGUMENT / TS_ARGUMENT_2, which
+    the first two variable arguments point at (so a %s there is valid; a
+    number conversion prints the pointer)."""
+    fmt = TS_FORMATS[args[9] % len(TS_FORMATS)]
+    fields = [(TS_TEXT + i, b, 1) for i, b in enumerate(fmt + b"\0")]
+    for where in (TS_ARGUMENT, TS_ARGUMENT_2):
+        argument = rng.choice([b"", b"Baumeister", b"a", b"Kohle und Eisen"])
+        fields += [(where + i, b, 1) for i, b in enumerate(argument + b"\0")]
+    return fields
+
+
+def ts_format_index(rng, pool):
+    return rng.randrange(len(TS_FORMATS))
+
+
+# Unreachable after a thrower call (it never returns): the clean-up of the
+# message string and the frees of temporaries that never get a buffer.
+CLEANUP_CTEXTSURFACE_CREATE = (0x4a7ab8, 0x4a7adf, 0x4a7ae1, 0x4a7ae5, 0x4a7b0e, 0x4a7b18, 0x4a7b1c, 0x4a7c52, 0x4a7c74,
+                               0x4a7c76, 0x4a7c7a, 0x4a7ca3, 0x4a7cad)
+CLEANUP_CTEXTSURFACE_LOCK = (0x4a8cb3, 0x4a8cbd, 0x4a8cc1, 0x4a8cc7, 0x4a8d1e, 0x4a8d35, 0x4a8d3c, 0x4a8d41,
+                             0x4a8d6d, 0x4a8d75, 0x4a8d77, 0x4a8d7b, 0x4a8da1, 0x4a8dad, 0x4a8db5, 0x4a8dba,
+                             0x4a8dc4, 0x4a8dc8, 0x4a8dce)
+CLEANUP_CTEXTSURFACE_DRAWTEXT = (0x4a81f6, 0x4a82f4, 0x4a83e9, 0x4a84de, 0x4a85d2, 0x4a86f6, 0x4a877f)
+# DrawTextF: the string built from the buffer is never shared when it is
+# freed: the temporary's buffer has count 1 when it is released (0x4a88db:
+# count 0 / frozen), and the string's destructor finds count 0, so its
+# split (0x4a896a, 0x4a896f) and the shared release (0x4a89f0, 0x4a89f4)
+# don't run; erase(0, npos) leaves length 0, for which _Grow returns false
+# (0x4a89d1).
+CLEANUP_CTEXTSURFACE_DRAWTEXTF = (0x4a88db, 0x4a896a, 0x4a896f, 0x4a89d1, 0x4a89f0, 0x4a89f4)
+
+SPECS += [
+    Spec("CTextSurface_Unlock", 0x004a8e00, "thiscall", [], eax_mask=0),
+    Spec("CTextSurface_Lock", 0x004a8bd0, "thiscall", [], callees=TS_CALLEES,
+         exempt_blocks=CLEANUP_CTEXTSURFACE_LOCK),
+    Spec("CTextSurface_DrawText", 0x004a8090, "thiscall",
+         [one_of(WORLD_BASE + TS_RESULT), ts_font, ts_rect_arg, ts_flags, one_of(WORLD_BASE + TS_STRING)],
+         presets=ts_string, callees=TS_CALLEES, exempt_blocks=CLEANUP_CTEXTSURFACE_DRAWTEXT),
+    # cdecl (this, result, font, rect, flags, format, ...): "stdcall" passes
+    # everything on the stack; both pop nothing. The nested DrawText runs.
+    Spec("CTextSurface_DrawTextF", 0x004a87d0, "stdcall",
+         [one_of(WORLD_BASE), one_of(WORLD_BASE + TS_RESULT), ts_font, ts_rect_arg, ts_flags,
+          one_of(WORLD_BASE + TS_TEXT), one_of(WORLD_BASE + TS_ARGUMENT), one_of(WORLD_BASE + TS_ARGUMENT_2),
+          anything, ts_format_index],
+         presets=ts_format_world, callees=TS_CALLEES, exempt_blocks=CLEANUP_CTEXTSURFACE_DRAWTEXTF),
+]
+
+
+# -- the drawer's panel texts (text_panels.cpp, wip/text-r6) ----------------
+# ClearTextRect / BlitTextRect: the drawer at world 0, its text surface
+# (+0x5f6e0) at TP_SURFACE with bits at TP_BITS and a pitch of 1..24; Lock
+# (GdiFlush) and Unlock run (ours are verified); a failing GdiFlush throws
+# (TS_CALLEES). DrawGlyphRow 0x4d6950 is probed (verified; it writes
+# pixels through a random pointer). Rects stay mostly inside the surface;
+# sometimes the width is 0 or the end row wraps.
+# The panel helpers: everything they call is probed: ClearTextRect,
+# BlitTextRect, TextAddress (returns one of the texts at TP_TEXTS),
+# DrawText and DrawTextF (cdecl; recorded without the result pointer, a
+# stack local, and with texts by contents). g_uiCellSize and the drawing
+# origin are random per case. The sprintf of PanelHundredths runs (CRT).
+TP_SURFACE = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+TP_BITS = SCRATCH + 7 * SCRATCH_SLOT_BYTES
+TP_TEXTS = SCRATCH + 8 * SCRATCH_SLOT_BYTES
+TP_STRING_BUFFER = SCRATCH + 9 * SCRATCH_SLOT_BYTES
+TP_GAME_TEXTS = [b"Holz", b"%u Steine", b"", b"Bauplatz\nfrei", b"%d%%", b"Kohle: %u"]
+
+
+def tp_surface_world(rng, pool, args):
+    pitch = rng.randrange(1, 25)
+    return [(0x5f6e0, WORLD_BASE + TP_SURFACE, 4), (TP_SURFACE + 0x88, WORLD_BASE + TP_BITS, 4),
+            (TP_SURFACE + 0x8c, pitch, 4)]
+
+
+def tp_x(rng, pool):
+    return rng.randrange(192)
+
+
+def tp_width(rng, pool):
+    return rng.choice([0, 1, rng.randrange(1, 9), rng.randrange(1, 192), rng.randrange(1, 64)])
+
+
+def tp_y(rng, pool):
+    return rng.randrange(4, 48)
+
+
+def tp_height(rng, pool):
+    return rng.choice([0, rng.randrange(1, 8), rng.randrange(48), 0xFFFFFFFF - rng.randrange(4)])
+
+
+TP_RECT_CALLEES = dict(TS_CALLEES)
+TP_RECT_CALLEES[0x004d6950] = (3, "thiscall", "probe")  # CDrawer::DrawGlyphRow
+
+
+def tp_text_address(h):
+    return WORLD_BASE + TP_TEXTS + 0x40 * (h % len(TP_GAME_TEXTS))
+
+
+def tp_texts_world(rng, pool, args):
+    fields = []
+    for k, text in enumerate(TP_GAME_TEXTS):
+        fields += [(TP_TEXTS + 0x40 * k + i, b, 1) for i, b in enumerate(text + bytes(1))]
+    return fields
+
+
+def tp_cstring(machine, address):
+    return machine.guest_read(address, 64).split(bytes(1))[0] if address else None
+
+
+def tp_drawtextf_record(varargs):
+    def record(machine, ecx, args):
+        return (args[0], args[2], args[3], args[4], tp_cstring(machine, args[5]), *args[6:6 + varargs])
+    return record
+
+
+def tp_string_record(machine, ecx, args):
+    text = args[4]
+    pointer, length = struct.unpack("<II", machine.guest_read(text + 4, 8))
+    contents = machine.guest_read(pointer, min(length, 64)) if pointer else None
+    return (args[1], args[2], args[3], length, contents)
+
+
+def tp_panel_callees(varargs):
+    return {
+        0x004d65e0: (4, "thiscall", "probe"),   # CDrawer::ClearTextRect
+        0x004d6740: (4, "thiscall", "probe"),   # CDrawer::BlitTextRect
+        0x005faaa0: (2, "thiscall", tp_text_address),  # CGraphicsData::TextAddress
+        0x004a87d0: (6 + varargs, "cdecl", lambda h: 0, None, tp_drawtextf_record(varargs)),  # DrawTextF
+        0x004a8090: (5, "thiscall", lambda h: 0, None, tp_string_record),  # CTextSurface::DrawText
+    }
+
+
+def tp_layout_globals(rng, pool, args):
+    cell = rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(3, 6)
+    x = rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(800)
+    y = rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(600)
+    return [(0x00730F38, cell, 4), (0x00730F3C, x, 4), (0x00730F40, y, 4)]
+
+
+def tp_small(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(60)
+
+
+def tp_hundredths(rng, pool):
+    r = rng.randrange(4)
+    return (100 * rng.randrange(1000), 10 * rng.randrange(10000), rng.getrandbits(32), rng.randrange(100000))[r]
+
+
+def tp_string_world(rng, pool, args):
+    """PanelString's by-value string (args[2..5]): its buffer at
+    TP_STRING_BUFFER (count byte, text), shared sometimes (count 1..3), so
+    the destructor's split runs."""
+    fields = tp_texts_world(rng, pool, args)
+    text = rng.choice([b"Lager", b"Ein langer Titel", b"x"])
+    count = rng.choice([0, 0, 1, 2, 3])
+    fields.append((TP_STRING_BUFFER, count, 1))
+    fields += [(TP_STRING_BUFFER + 1 + i, b, 1) for i, b in enumerate(text + bytes(1))]
+    return fields
+
+
+def tp_string_pointer(rng, pool):
+    return 0 if rng.random() < 0.1 else WORLD_BASE + TP_STRING_BUFFER + 1
+
+
+def tp_string_length(rng, pool):
+    return rng.choice([1, 5, 16])
+
+
+def tp_caption(rng, pool):
+    return rng.choice([0, WORLD_BASE + TP_TEXTS, WORLD_BASE + TP_TEXTS + 0x40, WORLD_BASE + TP_TEXTS + 0xc0])
+
+
+# The C runtime's floating-point conversion table (_cfltcvt_tab 0x7a5d24..):
+# the CRT's start-up (_cfltcvt_init 0x61ef81) points its six entries at the
+# conversion functions; the image still has _fptrap (0x62b7bc, "floating
+# point not loaded") there, and the emulator doesn't run the start-up. The
+# values are the ones _cfltcvt_init stores.
+CRT_FLOAT_CONVERSIONS = [(0x007A5D24, 0x0062498C, 4), (0x007A5D28, 0x00624636, 4), (0x007A5D2C, 0x0062469C, 4),
+                         (0x007A5D30, 0x006245DC, 4), (0x007A5D34, 0x00624684, 4), (0x007A5D38, 0x0062498C, 4)]
+
+
+def tp_hundredths_globals(rng, pool, args):
+    return tp_layout_globals(rng, pool, args) + CRT_FLOAT_CONVERSIONS
+
+
+# Dead in the string helpers (as in CTextSurface::DrawTextF): a string
+# that is freed is never shared any more (count 0 after the split or the
+# construction; frozen ones skip both), so the shared release
+# (PanelString 0x4d6d94, 0x4d6d99; PanelCaption 0x4d786b, 0x4d7870), the
+# temporary's free with count 0 (PanelCaption 0x4d778a) and the split of an
+# unshared string (PanelCaption 0x4d77de, 0x4d77e3) don't run; erase(0,
+# npos) leaves length 0, for which _Grow returns false (PanelString
+# 0x4d6d75, PanelCaption 0x4d7845).
+DEAD_PANEL_STRING = (0x4d6d75, 0x4d6d94, 0x4d6d99)
+DEAD_PANEL_CAPTION = (0x4d778a, 0x4d77de, 0x4d77e3, 0x4d7845, 0x4d786b, 0x4d7870)
+
+
+def tp_panel_spec(name, address, args, varargs, **options):
+    return Spec(name, address, "thiscall", args, presets=options.pop("presets", tp_texts_world),
+                globals=options.pop("globals", tp_layout_globals), callees=tp_panel_callees(varargs),
+                eax_mask=options.pop("eax_mask", 0), **options)
+
+
+SPECS += [
+    Spec("CDrawer_ClearTextRect", 0x004d65e0, "thiscall", [tp_x, tp_y, tp_width, tp_height],
+         presets=tp_surface_world, callees=TP_RECT_CALLEES, eax_mask=0),
+    Spec("CDrawer_BlitTextRect", 0x004d6740, "thiscall", [tp_x, tp_y, tp_width, tp_height],
+         presets=tp_surface_world, callees=TP_RECT_CALLEES, eax_mask=0),
+    tp_panel_spec("CDrawer_PanelText", 0x004d6a30, [tp_small, tp_small, anything], 0),
+    tp_panel_spec("CDrawer_PanelTextFont1", 0x004d6b10, [tp_small, tp_small, anything], 0),
+    tp_panel_spec("CDrawer_PanelTextLeftHalf", 0x004d6f90, [tp_small, tp_small, anything], 0),
+    tp_panel_spec("CDrawer_PanelTextRightHalf", 0x004d7070, [tp_small, tp_small, anything], 0),
+    tp_panel_spec("CDrawer_PanelTextArg", 0x004d6dd0, [tp_small, tp_small, anything, anything], 1),
+    tp_panel_spec("CDrawer_PanelTextIndentedArg", 0x004d6eb0, [tp_small, tp_small, anything, anything], 1),
+    tp_panel_spec("CDrawer_PanelTextAt", 0x004d7470, [tp_small, tp_small, tp_small, anything], 0),
+    tp_panel_spec("CDrawer_PanelTextAtFont1", 0x004d7550, [tp_small, tp_small, tp_small, anything], 0),
+    tp_panel_spec("CDrawer_PanelTextAtArg", 0x004d78d0, [tp_small, tp_small, tp_small, anything, anything], 1),
+    tp_panel_spec("CDrawer_PanelNumber", 0x004d7150, [tp_small, tp_small, anything], 1),
+    tp_panel_spec("CDrawer_PanelPercent", 0x004d7390, [tp_small, tp_small, anything], 1),
+    tp_panel_spec("CDrawer_PanelHundredths", 0x004d7230, [below(3), tp_small, tp_small, tp_hundredths], 0,
+                  eax_mask=0xFFFFFFFF, globals=tp_hundredths_globals),
+    tp_panel_spec("CDrawer_PanelString", 0x004d6bf0,
+                  [tp_small, tp_small, anything, tp_string_pointer, tp_string_length, tp_string_length], 0,
+                  presets=tp_string_world, exempt_blocks=DEAD_PANEL_STRING),
+    tp_panel_spec("CDrawer_PanelCaption", 0x004d7630, [tp_small, tp_caption], 0, exempt_blocks=DEAD_PANEL_CAPTION),
+]
+
+
+# -- Dirk::CTextSurface::AddFont (text_surface.cpp, wip/text-r6) -------------
+# GetStockObject (fails now and then: the VERIFY throw) and
+# CreateFontIndirectA (records the LOGFONTA's 60 bytes) are API probes; the
+# dictionary find/insert are probed as for DrawText; GameConfig::Dword28
+# 0x4120a0 is probed (7, the Japanese charset, in half of the calls).
+def ts_face(rng, pool, args):
+    """AddFont's face: a std::string at TS_STRING with at most 31 characters
+    (the original strcpy's it into LOGFONTA's 32 bytes)."""
+    length = rng.randrange(32)
+    text = bytes(rng.randrange(32, 127) for _ in range(length))
+    fields = [(TS_TEXT + i, b, 1) for i, b in enumerate(text + bytes(1))]
+    pointer = 0 if rng.random() < 0.1 else WORLD_BASE + TS_TEXT
+    return fields + [(TS_STRING + 4, pointer, 4), (TS_STRING + 8, length, 4), (TS_STRING + 12, length, 4)]
+
+
+TS_ADD_FONT_CALLEES = dict(TS_CALLEES)
+TS_ADD_FONT_CALLEES[0x004120a0] = (0, "thiscall", lambda h: 7 if h & 1 else (h >> 4) % 10)  # GameConfig::Dword28
+
+SPECS += [
+    Spec("CTextSurface_AddFont", 0x004a7df0, "thiscall",
+         [ts_font, one_of(WORLD_BASE + TS_STRING), anything, anything, anything],
+         presets=ts_face, callees=TS_ADD_FONT_CALLEES,
+         # the never-reached clean-up after the thrower; 0x4a8061: a failed
+         # insert (the original writes to address 0), which the probe never gives
+         exempt_blocks=(0x4a7f2e, 0x4a7f50, 0x4a7f52, 0x4a7f56, 0x4a7f80, 0x4a7f8a, 0x4a8061)),
+]
+
+
+# -- CDrawer::InitPanelFonts (text_panels.cpp, wip/text-r6) -----------------
+# The drawer at world 0; CSoundData::GetSetNumber 0x5ff4e0 probed (4 in
+# half of the calls: the MS Sans Serif branch), AddFont probed with the
+# face recorded by contents; the face strings are built and freed for real
+# (the bump allocator compares the allocations). g_uiCellSize, the drawing
+# origin and the display globals are random per case.
+def ts_face_record(machine, ecx, args):
+    pointer, length = struct.unpack("<II", machine.guest_read(args[1] + 4, 8))
+    face = machine.guest_read(pointer, min(length, 64)) if pointer else None
+    return (args[0], length, face, *args[2:])
+
+
+def tp_fonts_globals(rng, pool, args):
+    return tp_layout_globals(rng, pool, args) + [(0x00730F0C, rng.getrandbits(32), 4),
+                                                 (0x00730F10, rng.getrandbits(32), 4),
+                                                 (0x00730F24, rng.getrandbits(32), 4)]
+
+
+TP_FONTS_CALLEES = {
+    0x005ff4e0: (0, "thiscall", lambda h: 4 if h & 1 else (h >> 4) % 8),  # CSoundData::GetSetNumber
+    0x004a7df0: (5, "thiscall", "probe", None, ts_face_record),           # CTextSurface::AddFont
+}
+
+SPECS += [
+    Spec("CDrawer_InitPanelFonts", 0x004c6f60, "thiscall", [], globals=tp_fonts_globals,
+         callees=TP_FONTS_CALLEES, eax_mask=0),
+]
+
+
+# -- Dirk::CTextSurface::Create (text_surface.cpp, wip/text-r6) --------------
+# GetDC, CreateDIBSection (records the BITMAPINFO, writes the bits
+# pointer) and ReleaseDC are API probes; GetDC and CreateDIBSection fail
+# now and then (the VERIFY throws, both messages without their allocator
+# byte: uninitialized in the original). Widths around multiples of 32 and
+# negative ones (the signed pitch division).
+def ts_create_record(machine, ecx, args):
+    record = thrower_record(machine, ecx, args)
+    message = record[-1]
+    return record[:-1] + ((message[4:] if message is not None else None),)
+
+
+TS_CREATE_CALLEES = {0x00610de0: (3, "thiscall", "throw", None, ts_create_record)}
+
+
+def ts_width(rng, pool):
+    return rng.choice([rng.randrange(1, 2048), 32 * rng.randrange(1, 64), 32 * rng.randrange(1, 64) + 1,
+                       -rng.randrange(1, 100) & 0xFFFFFFFF, 0, rng.getrandbits(32)])
+
+
+SPECS += [
+    Spec("CTextSurface_Create", 0x004a78f0, "thiscall", [ts_width, anything], callees=TS_CREATE_CALLEES,
+         exempt_blocks=CLEANUP_CTEXTSURFACE_CREATE),
+]
+
+
+# -- Dirk::CTextSurface::DrawWideText (text_surface.cpp, wip/text-r6) --------
+# The wide string at TS_STRING with its characters at TS_TEXT (1..0xff:
+# characters wcstombs rejects set errno, whose thread data needs
+# TlsGetValue, and an embedded zero hangs the original, see
+# wide_to_narrow.cpp); WideToNarrowString and the CRT's wcstombs run;
+# DrawText is probed (recorded with its text by contents, the result
+# pointer being a stack local).
+def ts_wide_string(rng, pool, args):
+    length = rng.randrange(33)
+    fields = []
+    for i in range(length):
+        c = rng.randrange(32, 127) if rng.random() < 0.9 else rng.randrange(1, 0x100)
+        fields.append((TS_TEXT + 2 * i, c, 2))
+    fields.append((TS_TEXT + 2 * length, 0, 2))
+    pointer = 0 if rng.random() < 0.1 else WORLD_BASE + TS_TEXT
+    return fields + [(TS_STRING + 4, pointer, 4), (TS_STRING + 8, length if pointer else 0, 4),
+                     (TS_STRING + 12, length, 4)]
+
+
+SPECS += [
+    Spec("CTextSurface_DrawWideText", 0x004a8a20, "thiscall",
+         [one_of(WORLD_BASE + TS_RESULT), ts_font, ts_rect_arg, ts_flags, one_of(WORLD_BASE + TS_STRING)],
+         presets=ts_wide_string,
+         callees={0x004a8090: (5, "thiscall", lambda h: WORLD_BASE + TS_RESULT + 0x40, None, tp_string_record)},
+         # dead: erase(0, npos) leaves length 0, for which _Grow returns false
+         # (0x4a8abd, 0x4a8b8f); the copy is never shared when it is destroyed
+         # (the temporary's destructor split off its own buffer first: 0x4a8b2f,
+         # 0x4a8b33)
+         exempt_blocks=(0x4a8abd, 0x4a8b2f, 0x4a8b33, 0x4a8b8f)),
+]
+
+
+# -- CDrawer::RenderMessageTexts (text_panels.cpp, wip/text-r6) --------------
+# The drawer at world 0, the draw data at TP_DRAW_DATA (lazily random, the
+# shown flags preset half the time); ClearTextRect and DrawWideText probed
+# (DrawWideText recorded with its rect's contents, a stack local).
+TP_DRAW_DATA = 0x200000
+
+
+def tp_draw_wide_record(machine, ecx, args):
+    rect = struct.unpack("<4I", machine.guest_read(args[2], 16))
+    return (args[1], rect, args[3], args[4])
+
+
+def tp_message_world(rng, pool, args):
+    fields = [(TP_DRAW_DATA + 0xc66d4, rng.choice([0, 0, 1, rng.randrange(256)]), 1)]
+    for k in range(20):
+        record = TP_DRAW_DATA + 0xc66d8 + 0x1c * k
+        fields.append((record + 0x18, rng.choice([0, 0, 1, rng.randrange(256)]), 1))
+        if rng.random() < 0.3:
+            fields.append((record + 0x10, 0, 4))
+    return fields
+
+
+def tp_message_globals(rng, pool, args):
+    cell = rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(3, 6)
+    height = rng.getrandbits(32) if rng.random() < 0.1 else rng.choice([480, 600, 768])
+    return [(0x00730F38, cell, 4), (0x00730F10, height, 4)]
+
+
+SPECS += [
+    Spec("CDrawer_RenderMessageTexts", 0x004d82b0, "thiscall", [one_of(WORLD_BASE + TP_DRAW_DATA)],
+         presets=tp_message_world, globals=tp_message_globals, eax_mask=0,
+         callees={0x004d65e0: (4, "thiscall", "probe"),
+                  0x004a8a20: (5, "thiscall", lambda h: 0, None, tp_draw_wide_record)}),
+]
+
+
+# -- CDrawer::BlitMessageTexts (text_panels.cpp, wip/text-r6) ----------------
+# The drawer at world 0, the draw data at TP_DRAW_DATA (shown flags, +0x10
+# and the kinds preset half the time, header text length often 0);
+# BlitTextRect probed; the animation getters probed (they write the image
+# list TP_ICON_LIST, whose image offsets are lazily random); the palette
+# getter probed; DrawSprite / DrawColorIndexed probed as stdcall (the
+# GfxDword is a stack local: recorded by its value, the position and the
+# clip rect by contents); GfxDword's constructor, ListImage, Point16 and
+# wcslen run.
+TP_ICON_LIST = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+
+
+def tp_icon_out(m, ecx, args, h):
+    m.guest_write(args[0], struct.pack("<I", WORLD_BASE + TP_ICON_LIST))
+    return args[0]
+
+
+def tp_draw_record(machine, ecx, args):
+    from unicorn.x86_const import UC_X86_REG_ECX
+    this = machine.uc.reg_read(UC_X86_REG_ECX)
+    value = struct.unpack("<I", machine.guest_read(this, 4))[0]
+    position = struct.unpack("<I", machine.guest_read(args[1], 4))[0]
+    clip = struct.unpack("<4I", machine.guest_read(args[2], 16))
+    return (value, args[0], position, clip, *args[3:])
+
+
+def tp_blit_messages_world(rng, pool, args):
+    fields = [(TP_DRAW_DATA + 0xc66d4, rng.choice([0, 0, 1, rng.randrange(256)]), 1),
+              (TP_DRAW_DATA + 0xc66c8, rng.choice([0, 0, rng.randrange(8)]), 4),
+              (TP_DRAW_DATA + 0xc66c4, WORLD_BASE + TP_TEXTS, 4)]
+    # The header text: "ABC" or one different character (compared with
+    # g_setupWideText, see tp_blit_messages_globals).
+    for i, c in enumerate([0x41, 0x42, 0x43] if rng.random() < 0.7 else [0x41, 0x58, 0x43]):
+        fields.append((TP_TEXTS + 2 * i, c, 2))
+    if rng.random() < 0.5:
+        fields.append((TP_DRAW_DATA + 0xc66d0, 0, 4))
+    for k in range(20):
+        record = TP_DRAW_DATA + 0xc66d8 + 0x1c * k
+        fields.append((record + 0x18, rng.choice([0, 0, 1, rng.randrange(256)]), 1))
+        if rng.random() < 0.3:
+            fields.append((record + 0x10, 0, 4))
+        fields.append((record + 0x14, rng.choice([rng.randrange(20), 0xfc, 0xfd, 0xfe, rng.getrandbits(32),
+                                                  rng.randrange(300)]), 4))
+    return fields
+
+
+def tp_blit_messages_globals(rng, pool, args):
+    """Also g_setupWideText (0x7a8248, empty in the image) with 1..3
+    characters in half of the cases, so the header's compare loop runs; the
+    header text (tp_blit_messages_world) is then often equal to it or a
+    prefix."""
+    fields = tp_message_globals(rng, pool, args) + [(0x00730F0C, rng.choice([640, 800, 1024]), 4)]
+    if rng.random() < 0.5:
+        for i, c in enumerate([0x41, 0x42, 0x43][:rng.randrange(1, 4)]):
+            fields.append((0x007A8248 + 2 * i, c, 2))
+        fields.append((0x007A8248 + 2 * 3, 0, 2))
+    return fields
+
+
+SPECS += [
+    Spec("CDrawer_BlitMessageTexts", 0x004d8400, "thiscall", [one_of(WORLD_BASE + TP_DRAW_DATA)],
+         presets=tp_blit_messages_world, globals=tp_blit_messages_globals, eax_mask=0,
+         callees={0x004d6740: (4, "thiscall", "probe"),                    # CDrawer::BlitTextRect
+                  # (the out pointer is a stack local: recorded is the id)
+                  0x005faaf0: (2, "thiscall", "probe", tp_icon_out, lambda m, ecx, a: (a[1],)),  # AnimationPointer
+                  0x005fab50: (2, "thiscall", "probe", tp_icon_out, lambda m, ecx, a: (a[1],)),  # ColorIndexed...
+                  0x005fac10: (2, "thiscall", "probe"),                    # PalettePointer
+                  0x005fadb0: (5, "stdcall", "probe", None, tp_draw_record),   # GfxDword::DrawSprite
+                  0x005fc5f0: (4, "stdcall", "probe", None, tp_draw_record)}),  # GfxDword::DrawColorIndexed
+]
+
+
+# -- CLandscapeSurface::BlitVisibleArea (landscape_blit.cpp, wip/text-r6) ----
+# The surface at world 0: size (height above the 40-pixel band, width not
+# 0: otherwise both loop forever), scroll positions up to a few wraps; the
+# blit function pointer +0x84 points at the probe slot 0x84 (3 stack
+# arguments: count, source, destination; both arrays are stack locals,
+# recorded by an effect with exactly `count` rects, and EDX = +0x70);
+# the screen globals random per case.
+def lb_world(rng, pool, args):
+    width = rng.choice([rng.randrange(1, 200), rng.randrange(400, 4400)])
+    height = rng.choice([rng.randrange(41, 240), rng.randrange(400, 4400)])
+    scroll_x = rng.choice([rng.randrange(8), rng.randrange(width * 3 + 1)])
+    scroll_y = rng.choice([rng.randrange(32), rng.randrange(height * 3 + 1)])
+    return [(0x50, width, 4), (0x54, height, 4), (0x68, scroll_x, 4), (0x6c, scroll_y, 4),
+            (0x84, VIRTUAL_CODE_SLOT_84, 4)]
+
+
+VIRTUAL_CODE_SLOT_84 = FAKE_VTABLE + 0x1000 + 0x84  # emu.VIRTUAL_CODE + slot offset
+
+
+def lb_globals(rng, pool, args):
+    return [(0x00730F18, rng.choice([rng.randrange(5000), rng.randrange(504, 1104)]), 4),
+            (0x00730F1C, rng.choice([rng.randrange(5000), rng.randrange(480, 780)]), 4),
+            (0x00730F24, rng.choice([rng.getrandbits(32), rng.randrange(136, 217)]), 4),
+            (0x007DFD58, rng.choice([0, 0, 0, rng.getrandbits(32)]), 4)]
+
+
+def lb_record_rects(machine, ecx, args, h):
+    from unicorn.x86_const import UC_X86_REG_EDX
+    count = args[0]
+    n = min(count, 4)
+    machine.probe_calls.append(("rects", machine.uc.reg_read(UC_X86_REG_EDX), count,
+                                bytes(machine.guest_read(args[1], 16 * n)), bytes(machine.guest_read(args[2], 16 * n))))
+
+
+SPECS += [
+    Spec("CLandscapeSurface_BlitVisibleArea", 0x0054c9d0, "thiscall", [], presets=lb_world, globals=lb_globals,
+         virtuals={0x84: (3, {1: 0, 2: 0})}, virtual_effects={0x84: lb_record_rects}),
+]
+
+
+# -- CDrawThread::SignalFrameDone (draw_thread.cpp, wip/text-r6) -------------
+# The thread object at world 0; Win32::CEvent::Set 0x42cf80 probed (it is
+# verified; recorded with ECX = the event pointer +0x64).
+SPECS += [
+    Spec("CDrawThread_SignalFrameDone", 0x0042c810, "thiscall", [],
+         callees={0x0042cf80: (0, "thiscall", "probe")},
+         exempt_blocks=(0x42c818,)),  # the alignment padding after the tail jump
+]
+
+
+# -- Dirk::CMouseSurface::SetHotspot (mouse_surface.cpp, wip/text-r6) --------
+# The surface at world 0; Enter/Leave of its section +0x4c run (ours are
+# verified; Enter/LeaveCriticalSection are API probes).
+SPECS += [
+    Spec("CMouseSurface_SetHotspot", 0x00469130, "thiscall", [anything, anything]),
+]
+
+
+# -- Dirk::CMouseSurface::Clear (mouse_surface.cpp, wip/text-r6) -------------
+# The surface at world 0 with its IDirectDrawSurface (+8) at MS_IFACE
+# (vtable FAKE_VTABLE: GetSurfaceDesc 0x58 and Unlock 0x80 as COM probes
+# returning DD_OK, DDERR_SURFACELOST or another error); CLock and the
+# critical section run (API probes); CheckResult 0x5bf2e0 probed (returns
+# its hr); CSurface::Lock 0x5bf050 probed: it writes a description of up to
+# 24 x 24 pixels at MS_PIXELS into the (stack) DDSURFACEDESC.
+MS_IFACE = SCRATCH + 11 * SCRATCH_SLOT_BYTES
+MS_PIXELS = SCRATCH + 12 * SCRATCH_SLOT_BYTES
+
+
+def ms_world(rng, pool, args):
+    return [(8, WORLD_BASE + MS_IFACE, 4), (MS_IFACE, FAKE_VTABLE, 4)]
+
+
+def ms_lock_effect(machine, ecx, args, h):
+    width = (h >> 8) % 25
+    height = (h >> 16) % 25
+    pitch = 2 * (width + (h >> 24) % 24) + ((h >> 32) & 1)
+    offset = 2 * ((h >> 40) % 16)
+    machine.guest_write(args[1] + 8, struct.pack("<III", height, width, pitch))
+    machine.guest_write(args[1] + 0x24, struct.pack("<I", WORLD_BASE + MS_PIXELS + offset))
+    return 0
+
+
+def ms_com_result(h):
+    return (0, 0, 0x887601C2, 0x887601C2, 0x88760005)[h % 5]
+
+
+SPECS += [
+    Spec("CMouseSurface_Clear", 0x00469310, "thiscall", [], presets=ms_world,
+         virtuals={0x58: (2, {1: 0x6c}, {"com": True, "returns": ms_com_result}),
+                   0x80: (2, {}, {"com": True, "returns": ms_com_result})},
+         callees={0x005bf2e0: (2, "thiscall", "probe", lambda m, ecx, args, h: args[0]),       # CheckResult
+                  0x005bf050: (3, "thiscall", "probe", ms_lock_effect,                         # CSurface::Lock
+                               lambda m, ecx, a: (a[0], a[2], bytes(m.guest_read(a[1], 0x6c))))}),
+]
