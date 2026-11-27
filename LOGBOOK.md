@@ -18,10 +18,8 @@ batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch. The user wants each round followed by the next right away.**
 
 **Round 6 is merged and has its milestone evidence** (session 58 entry):
-main has wip/watcom-r6, png-r6 and text-r6. Their worktrees
-(`..\s3re-text-r6`, `..\s3re-watcom-r6`, `..\s3re-png-r6`, and the older
-r4/r5 ones) can be removed: delete the `Settlers3Ultimate` junction first
-(`cmd /c rmdir`), then `git worktree remove`, never `--force`.
+main has wip/watcom-r6, png-r6, text-r6 and (round 7) cursor-r7; their
+worktrees and the r4/r5 ones are removed.
 
 **Next batches (round 7):**
 - **The panel drawer 0x4b4d00 (71 KB)** and **the settler drawer 0x4c85a0
