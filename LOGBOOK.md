@@ -27,7 +27,6 @@ r4/r5 ones) can be removed: delete the `Settlers3Ultimate` junction first
 - **The panel drawer 0x4b4d00 (71 KB)** and **the settler drawer 0x4c85a0
   (38 KB)**, as separate batches; their helpers (text-r6's panel texts,
   text surface, message texts) are done now.
-- **SetMouseCursor 0x42cb60** (needs a catch(...) rethrow test).
 - **Watcom leftovers:** 129 rows, mostly misnamed game/lobby functions that
   inline vectors (rename them), plus a few iterators and copy constructors.
   0x472eb0 stays original (folded DebugLog call).
@@ -157,6 +156,13 @@ against the merge base; no row was changed on both sides except
 - Numbers (progress.py): verified 12,764 functions (74.20 %), game code
   41.1 % verified (headline), all code 48.5 % of the bytes; identical in
   a whole-game check 11,665 functions (39.48 % of the bytes).
+- wip/cursor-r7 -> ef65f96 (27 verified: SetMouseCursor 0x42cb60, CDrawer
+  surfaces/lifetime, CGameThread/CGameDrawThread, CDrawThread steps,
+  CGameDrawer ctor/Shutdown, two Watcom vector ctors): drawer_layout.h
+  combined (text-r6 panel fields + int32 unk05f6b4 + cursor-r7's tail),
+  one kDDUnlock, specs appended; `--test` 1153/1153, emutest `--changed`
+  27 functions 0 mismatches; verified 12,791 (48.57 % of the bytes); no
+  whole-game check yet for 28.
 
 ### 2026-11-26/27 (57): merges of rounds 4-5, static-initializer stubs, milestone evidence
 
