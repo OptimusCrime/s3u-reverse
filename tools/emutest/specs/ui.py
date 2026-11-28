@@ -2175,3 +2175,112 @@ SPECS += [
                   0x0060d660: (0, "thiscall", "probe")},  # ~CCriticalSection
          exempt_blocks=(0x0040cffe, 0x0040d060)),
 ]
+
+
+# -- GameSettings::PlayerSetupById (game_settings_players.cpp, wip/console-r8)
+# As GameSettings_PlayerSetup (the same inlined operator[], vector presets,
+# element copies probed). The key setup is built on the stack by the real
+# GamePlayerSetup(id) (ours, verified); its destructor and the elements'
+# are probed as "stdcall" (ECX, the key's stack address in one frame or the
+# other, not recorded; the calls' order is). The vector's find (slot 3,
+# offset 0xc) records the key's id (+0x10), the occurrence and the index
+# by contents and writes an index (also out of range) through gv_find_effect.
+# Dead block 0x43551c: the length clamp after the growth (the length is 0
+# on that path).
+SPECS += [
+    Spec("GameSettings_PlayerSetupById", 0x00435390, "thiscall", [setup_index], presets=player_setup_vector,
+         callees={**GS_LOCK_CALLEES, 0x0049eaf0: (1, "thiscall", "this"),
+                  0x0049ec80: (0, "stdcall", "probe")},
+         virtuals={4: 1, 0x0c: (3, {0: ((0x10, 4),), 2: 4})}, virtual_effects={0x0c: gv_find_effect},
+         new_fails=0.1, new_fails_size=GS_SETUP_BYTES, exempt_blocks=(0x0043551c,)),
+]
+
+
+# -- GameSettings::SortedPlayerIdsOfType1 (game_settings_ids.cpp,
+# wip/console-r8). The settings are the world; 0..6 player setups (lazily
+# random fields; the type +0x5c is 1 half of the time) in scratch slot 26,
+# the result vector in scratch slot 27. The local sorted vector has its real
+# vtable (its find and comparison run as original code); the index check,
+# the getters, insertAt and base_copy (verified) run; the lock is probed.
+# Dead blocks: the inlined operator[]'s out-of-range and growth paths
+# (0x434d6a..0x434daf: the loop's index is below the length; only a length
+# of 0x80000000 or more, a loop of 2^31 rounds, would reach the clamp).
+GSI_SETUPS = SCRATCH + 26 * SCRATCH_SLOT_BYTES
+GSI_RESULT = SCRATCH + 27 * SCRATCH_SLOT_BYTES
+
+
+def gsi_setups(rng, pool, args):
+    count = rng.randrange(7)
+    fields = [(0x58, FAKE_VTABLE, 4), (0x60, WORLD_BASE + GSI_SETUPS, 4), (0x64, count, 4), (0x68, count, 4),
+              (0x6c, count, 4)]
+    for i in range(count):
+        base = GSI_SETUPS + 0xcc * i
+        fields += [(base + 0x5c, 1 if rng.random() < 0.5 else rng.randrange(4), 4),
+                   (base + 0x10, rng.randrange(8) if rng.random() < 0.8 else rng.getrandbits(32), 4)]
+    return fields
+
+
+SPECS += [
+    Spec("GameSettings_SortedPlayerIdsOfType1", 0x00434cd0, "thiscall", [lambda rng, pool: WORLD_BASE + GSI_RESULT],
+         presets=gsi_setups, callees=GS_LOCK_CALLEES,
+         exempt_blocks=(0x00434d6a, 0x00434d6e, 0x00434d81, 0x00434d8e, 0x00434d92, 0x00434da5, 0x00434da9,
+                        0x00434dad, 0x00434daf)),
+]
+
+
+# -- GameSettings::HumanPlayerCount / ComputerPlayerCount / TeamAt
+# (game_settings_counts.cpp, wip/console-r8). The settings are the world.
+# The counts: 0..6 setups (lazily random, the type +0x5c 0..4) in scratch
+# slot 26 (as gsi_setups); their inlined operator[] only sees indexes below
+# the length, so its out-of-range and growth paths are dead (a length of
+# 0x80000000 or more would loop 2^31 times). TeamAt: the team vector +0x3c
+# set up like player_setup_vector's (FAKE_VTABLE, slot 1 the notification),
+# CTeam's copy constructor and destructor probed, operator new failing in
+# some cases.
+def gsc_setups(rng, pool, args):
+    count = rng.randrange(7)
+    fields = [(0x58, FAKE_VTABLE, 4), (0x60, WORLD_BASE + GSI_SETUPS, 4), (0x64, count, 4), (0x68, count, 4),
+              (0x6c, count, 4)]
+    for i in range(count):
+        fields.append((GSI_SETUPS + 0xcc * i + 0x5c, rng.randrange(5), 4))
+    return fields
+
+
+def gsc_team_vector(rng, pool, args):
+    capacity = rng.choice([0, 0, 1, 2, 4, rng.getrandbits(32)])
+    filled = rng.choice([0, 1, 2, -1, rng.randrange(5)])
+    length = rng.choice([0, 0, 1, 2, 3, 5, 0x80000000 + rng.randrange(3), rng.getrandbits(32)])
+    data = rng.choice([0, WORLD_BASE + GS_SETUPS])
+    return [(0x3c, FAKE_VTABLE, 4), (0x3c + 8, data, 4), (0x3c + 0xc, capacity, 4),
+            (0x3c + 0x10, filled & 0xFFFFFFFF, 4), (0x3c + 0x14, length, 4)]
+
+
+GSC_COUNT_DEAD_HUMANS = (0x435b24, 0x435b2c, 0x435b45, 0x435b4d, 0x435b55, 0x435b61, 0x435b78, 0x435b8a,
+                         0x435b94, 0x435bb1, 0x435bbc, 0x435bca, 0x435bd3, 0x435bd5, 0x435bef, 0x435bf3,
+                         0x435c14, 0x435c17, 0x435c1b, 0x435c2f, 0x435c33, 0x435c37, 0x435c39)
+
+GSC_COUNT_DEAD_COMPUTERS = (0x435cfc, 0x435d04, 0x435d1d, 0x435d25, 0x435d2d, 0x435d39, 0x435d50, 0x435d62,
+                            0x435d6c, 0x435d89, 0x435d94, 0x435da2, 0x435dab, 0x435dad, 0x435dc7, 0x435dcb,
+                            0x435dec, 0x435def, 0x435e03, 0x435e18, 0x435e1c, 0x435e20, 0x435e22)
+
+SPECS += [
+    Spec("GameSettings_HumanPlayerCount", 0x00435ac0, "thiscall", [], presets=gsc_setups,
+         callees=GS_LOCK_CALLEES, exempt_blocks=GSC_COUNT_DEAD_HUMANS),
+    Spec("GameSettings_ComputerPlayerCount", 0x00435ca0, "thiscall", [], presets=gsc_setups,
+         callees=GS_LOCK_CALLEES, exempt_blocks=GSC_COUNT_DEAD_COMPUTERS),
+    # Dead block 0x4357a7: the length clamp after the growth (the length is 0
+    # on that path).
+    Spec("GameSettings_TeamAt", 0x00435680, "thiscall", [setup_index], presets=gsc_team_vector,
+         callees={**GS_LOCK_CALLEES, 0x004a03a0: (1, "thiscall", "this"), 0x004a04d0: (0, "thiscall", "probe")},
+         virtuals={4: 1}, new_fails=0.1, new_fails_size=0x40, exempt_blocks=(0x004357a7,)),
+]
+
+
+# -- GameSettings::HasPlayerId (game_settings_players.cpp, wip/console-r8):
+# PlayerSetupById's key and find without the access; find's result is the
+# probe value (0, 1 or random).
+SPECS += [
+    Spec("GameSettings_HasPlayerId", 0x00435590, "thiscall", [setup_index], eax_mask=0xff,
+         presets=player_setup_vector, callees={**GS_LOCK_CALLEES, 0x0049ec80: (0, "stdcall", "probe")},
+         virtuals={0x0c: (3, {0: ((0x10, 4),), 2: 4})}),
+]

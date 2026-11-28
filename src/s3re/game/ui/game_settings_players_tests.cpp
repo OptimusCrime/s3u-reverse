@@ -53,6 +53,12 @@ using PlayerSetupFn = GamePlayerSetup*(__fastcall*)(GameSettings* self, void* ed
 using SaveSetupFn = void(__fastcall*)(GameSettings* self, void* edx, CMapFile* file, std::uint32_t tick,
                                       std::uint32_t seed);
 extern PlayerSetupFn Original_GameSettings_PlayerSetup;
+GamePlayerSetup* __fastcall GameSettings_PlayerSetupById(GameSettings* self, void* edx, std::uint32_t id);
+using PlayerSetupByIdFn = GamePlayerSetup*(__fastcall*)(GameSettings* self, void* edx, std::uint32_t id);
+extern PlayerSetupByIdFn Original_GameSettings_PlayerSetupById;
+std::uint32_t __fastcall GameSettings_HasPlayerId(GameSettings* self, void* edx, std::uint32_t id);
+using HasPlayerIdFn = std::uint32_t(__fastcall*)(GameSettings* self, void* edx, std::uint32_t id);
+extern HasPlayerIdFn Original_GameSettings_HasPlayerId;
 GamePlayerSetup* __fastcall GamePlayerSetup_Construct(GamePlayerSetup* self, void* edx);
 using SetupConstructHookFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx);
 extern SetupConstructHookFn Original_GamePlayerSetup_Construct;
@@ -330,6 +336,67 @@ GamePlayerSetup* __fastcall WrongPlayerSetup(GameSettings* self, void* edx, std:
         index = 0;
     }
     return GameSettings_PlayerSetup(self, edx, index);
+}
+
+// PlayerSetupById: the vector's find (slot 3) is a fake that records the
+// key's id (+0x10) and the occurrence and finds the id at index id % 9 - 2
+// unless id % 4 == 0; the access then runs as in PlayerSetup's cases.
+std::uint32_t __fastcall FakeFind(PlayerSetupVector*, void*, const GamePlayerSetup* key, std::int32_t occurrence,
+                                  std::int32_t* index) {
+    g_recorder->calls.push_back(0xf1d);
+    g_recorder->calls.push_back(key->value10);
+    g_recorder->calls.push_back(static_cast<std::uint32_t>(occurrence));
+    g_recorder->calls.push_back(static_cast<std::uint32_t>(*index));
+    if (key->value10 % 4 == 0) {
+        return 0;
+    }
+    *index = static_cast<std::int32_t>(key->value10 % 9) - 2;
+    return 1;
+}
+
+const void* const kFakeFindVtable[4] = {reinterpret_cast<const void*>(&UndeclaredSlot),
+                                        reinterpret_cast<const void*>(&RecordNotify),
+                                        reinterpret_cast<const void*>(&UndeclaredSlot),
+                                        reinterpret_cast<const void*>(&FakeFind)};
+
+PlayerSetupByIdFn g_byIdCandidate = nullptr;
+std::uint32_t g_byIdId = 0;
+
+HasPlayerIdFn g_hasIdCandidate = nullptr;
+std::uint32_t g_hasIdResult = 0;
+
+GamePlayerSetup* __fastcall RunById(GameSettings* self, void* edx, std::int32_t) {
+    self->player_setups.vtable = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(kFakeFindVtable));
+    g_hasIdResult = g_hasIdCandidate(self, edx, g_byIdId) & 0xff;
+    return g_byIdCandidate(self, edx, g_byIdId);
+}
+
+void CompareAccessById(test::Context& ctx, PlayerSetupByIdFn candidate, HasPlayerIdFn hasCandidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        const AccessCase c = DrawAccessCase(ctx.rng());
+        g_byIdId = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(20);
+        g_byIdCandidate = Original_GameSettings_PlayerSetupById;
+        g_hasIdCandidate = Original_GameSettings_HasPlayerId;
+        const AccessOutcome a = RunAccess(&RunById, c);
+        const std::uint32_t hasA = g_hasIdResult;
+        g_byIdCandidate = candidate;
+        g_hasIdCandidate = hasCandidate;
+        const AccessOutcome b = RunAccess(&RunById, c);
+        if (!S3RE_EXPECT(a == b) || !S3RE_EXPECT_EQ(hasA, g_hasIdResult)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: length 0x%x capacity %u filled %d id %u: element %lld/%lld", i,
+                     c.length, c.capacity, c.filled, g_byIdId, static_cast<long long>(a.element),
+                     static_cast<long long>(b.element));
+            return;
+        }
+    }
+}
+
+// Wrong: looks up the next id for ids that are 1 modulo 4.
+GamePlayerSetup* __fastcall WrongPlayerSetupById(GameSettings* self, void* edx, std::uint32_t id) {
+    if (id % 4 == 1) {
+        id += 1;
+    }
+    return GameSettings_PlayerSetupById(self, edx, id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1124,6 +1191,14 @@ S3RE_TEST(GameSettings_PlayerSetup_MatchesOriginal) {
 S3RE_TEST(GameSettings_PlayerSetup_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareAccess(probe, &WrongPlayerSetup, 300);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameSettings_PlayerSetupById_MatchesOriginal) {
+    CompareAccessById(ctx, &GameSettings_PlayerSetupById, &GameSettings_HasPlayerId, 3000);
+}
+S3RE_TEST(GameSettings_PlayerSetupById_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareAccessById(probe, &WrongPlayerSetupById, &GameSettings_HasPlayerId, 300);
     S3RE_EXPECT(probe.failures() > 0);
 }
 S3RE_TEST(GameSettings_SaveSetup_MatchesOriginal) {

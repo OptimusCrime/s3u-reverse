@@ -8,6 +8,19 @@
 //   CLock functions are called) around the vector access below. Callers:
 //   CGameData::LoadMap (the colours), CLogicThread::OnStart, the game
 //   launch dialog and the lobby.
+// GameSettings::PlayerSetupById (0x00435390): (id) ret 4 -> GamePlayerSetup*,
+//   thiscall, under the lock: a temporary setup with that network id
+//   (GamePlayerSetup(id) 0x49e9f0) is looked for in the vector (its virtual
+//   find, slot 3, occurrence 1; not called on an empty vector); the index
+//   found, or -1, goes through the same inlined operator[] as PlayerSetup's
+//   (so an unknown id gives the first setup). The temporary is destroyed
+//   (0x49ec80) before the access. 20 callers (the drawer's peer messages,
+//   the lobby and network code, the menus). Was GameSetup_sub_435390.
+// GameSettings::HasPlayerId (0x00435590): (id) ret 4 -> AL, thiscall, under
+//   the lock: whether the vector's find (slot 3, occurrence 0) finds a
+//   temporary setup with that network id (not called on an empty vector).
+//   Callers: CNetSession::vf04 and the network code. Was
+//   GameSetup_sub_435590.
 // GameSettings::SaveSetup (0x00433490): (CMapFile* file, tick, seed) ret 0xc,
 //   thiscall; called by CLogicThread::SaveGame only. No lock. A local
 //   GamePlayerSetup (constructor 0x49e8f0) gets each element of the vector in
@@ -451,6 +464,14 @@ void __fastcall GameSettings_SaveSetup(GameSettings* self, void* edx, CMapFile* 
 S3RE_HOOK(0x004351e0, GameSettings_PlayerSetup, PlayerSetupFn, Original_GameSettings_PlayerSetup,
           GameSettings_PlayerSetup);
 S3RE_HOOK(0x00433490, GameSettings_SaveSetup, SaveSetupFn, Original_GameSettings_SaveSetup, GameSettings_SaveSetup);
+GamePlayerSetup* __fastcall GameSettings_PlayerSetupById(GameSettings* self, void* edx, std::uint32_t id);
+using PlayerSetupByIdFn = GamePlayerSetup*(__fastcall*)(GameSettings* self, void* edx, std::uint32_t id);
+std::uint32_t __fastcall GameSettings_HasPlayerId(GameSettings* self, void* edx, std::uint32_t id);
+using HasPlayerIdFn = std::uint32_t(__fastcall*)(GameSettings* self, void* edx, std::uint32_t id);
+S3RE_HOOK(0x00435590, GameSettings_HasPlayerId, HasPlayerIdFn, Original_GameSettings_HasPlayerId,
+          GameSettings_HasPlayerId);
+S3RE_HOOK(0x00435390, GameSettings_PlayerSetupById, PlayerSetupByIdFn, Original_GameSettings_PlayerSetupById,
+          GameSettings_PlayerSetupById);
 
 // Purpose: Gives one player's setup of the game being started (colour,
 // race, party...); the map loading, the game start and the setup dialogs
@@ -458,6 +479,50 @@ S3RE_HOOK(0x00433490, GameSettings_SaveSetup, SaveSetupFn, Original_GameSettings
 GamePlayerSetup* __fastcall GameSettings_PlayerSetup(GameSettings* self, void* /*edx*/, std::int32_t index) {
     GameLock lock(self->lock);
     return PlayerSetupAt(&self->player_setups, index);
+}
+
+namespace {
+
+using SetupConstructIdFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t id);
+using SetupFindFn = std::uint32_t(__fastcall*)(PlayerSetupVector* self, void* edx, const GamePlayerSetup* value,
+                                               std::int32_t occurrence, std::int32_t* index);
+constexpr std::uintptr_t kSetupConstructId = 0x0049e9f0;  // GamePlayerSetup::GamePlayerSetup(id) (ours)
+constexpr std::uint32_t kSetupFindSlot = 3;
+
+// The vector's virtual find (slot 3) for a temporary setup with network id
+// `id` (destroyed again before returning); false on an empty vector.
+bool FindSetupById(PlayerSetupVector* vector, std::uint32_t id, std::int32_t occurrence, std::int32_t* index) {
+    alignas(4) std::uint8_t keyBytes[sizeof(GamePlayerSetup)];
+    auto* key = reinterpret_cast<SetupConstructIdFn>(kSetupConstructId)(reinterpret_cast<GamePlayerSetup*>(keyBytes),
+                                                                         nullptr, id);
+    bool found = false;
+    if (vector->length != 0) {
+        const auto* vtable = reinterpret_cast<const std::uintptr_t*>(static_cast<std::uintptr_t>(vector->vtable));
+        found = reinterpret_cast<SetupFindFn>(vtable[kSetupFindSlot])(vector, nullptr, key, occurrence, index) != 0;
+    }
+    DestroySetup(key);
+    return found;
+}
+
+}  // namespace
+
+// Purpose: Finds the setup of the player with a network id (the first
+// setup when there is none).
+GamePlayerSetup* __fastcall GameSettings_PlayerSetupById(GameSettings* self, void* /*edx*/, std::uint32_t id) {
+    constexpr std::int32_t kFirstOccurrence = 1;
+    constexpr std::int32_t kNotFound = -1;
+    GameLock lock(self->lock);
+    std::int32_t index = 0;
+    const std::int32_t found = FindSetupById(&self->player_setups, id, kFirstOccurrence, &index) ? index : kNotFound;
+    return PlayerSetupAt(&self->player_setups, found);
+}
+
+// Purpose: Whether a player with this network id is in the game setup.
+std::uint32_t __fastcall GameSettings_HasPlayerId(GameSettings* self, void* /*edx*/, std::uint32_t id) {
+    constexpr std::int32_t kAnyOccurrence = 0;
+    GameLock lock(self->lock);
+    std::int32_t index = 0;
+    return FindSetupById(&self->player_setups, id, kAnyOccurrence, &index) ? 1 : 0;
 }
 
 // Purpose: Writes the game setup (the players, the local player, the game's

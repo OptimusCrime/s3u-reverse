@@ -281,6 +281,8 @@ add_library(s3re SHARED
     game/ui/game_settings_vectors.cpp
     game/ui/game_settings_access.cpp
     game/ui/game_settings_lifetime.cpp
+    game/ui/game_settings_ids.cpp
+    game/ui/game_settings_counts.cpp
     game/ui/game_teams.cpp
     game/ui/screen_element.cpp
     game/ui/ui_button_scroll.cpp
