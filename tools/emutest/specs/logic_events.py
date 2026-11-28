@@ -208,6 +208,27 @@ def pe_globals_for(focus: str):
 # (end of the part)
 #
 # --- part B (statistics) ---
+def _pe_menu2(rng, fields) -> None:
+    """Menu 2 (events_statistics.cpp): the page, the area in view (thread
+    +0x88/+0x8c/+0x90), the local player's race, the page 3 kinds and the
+    page 4 choice (world ui_2d2a4[])."""
+    t = LOGIC_THREAD
+    fields += [(0x2d290, rng.choice([1, 2, 2, 3, 3, 4, 4, rng.randrange(6)]), 4),
+               (0x2d294, rng.getrandbits(32), 4),
+               (t + 0x88, 0 if rng.random() < 0.15 else rng.choice([1, 1, rng.getrandbits(32)]), 4),
+               (t + 0x8c, rng.choice([0, 0, 1, 2, 15, 16]), 4),
+               (t + 0x90, rng.randrange(256), 4)]
+    for player in range(4):  # Player::race
+        fields.append((0x11943dc + 0x148 * player + 4, rng.choice([0, 1, 2, 3, 3, rng.randrange(8)]), 4))
+    for i in range(9):
+        fields.append((0x2d2a4 + 4 * i, rng.choice([0, 0, rng.randrange(1, 51), rng.getrandbits(32)]), 4))
+    if rng.random() < 0.3:
+        # More hover events (the tooltips): no events, idle 9 -> the
+        # synthesized hover event.
+        fields += [(PE_EVENTS + 0x20, 0, 4), (PE_EVENTS + 0x24, 0, 4), (t + PE_IDLE, 9, 4)]
+
+
+PE_MENU_PRESETS["menu2"] = _pe_menu2
 # (end of the part)
 #
 # --- part C (building info) ---

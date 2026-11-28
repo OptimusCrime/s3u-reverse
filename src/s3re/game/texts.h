@@ -810,6 +810,7 @@ inline constexpr GameText kCampaignOthersVsAmazonsLog{0x730020};   // "xxx Campa
 // (end of the part)
 //
 // --- events-r8 part B (statistics) ---
+inline constexpr GameText kGoodsPriorityLog{0x730008};  // "xxx prio 1: %u - %u %u" (DebugLog of the area menu's page 4)
 // (end of the part)
 //
 // --- events-r8 part C (building info) ---
