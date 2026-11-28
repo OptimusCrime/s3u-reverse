@@ -2226,3 +2226,77 @@ SPECS += [
     Spec("ostream_ApplyManipulator", 0x004063f0, "thiscall", [lambda rng, pool: 0x00411fc0],
          callees={0x00411fc0: (1, "cdecl", "probe")}),
 ]
+
+
+# -- CConsoleThread's state handling (console_thread_small.cpp,
+# wip/console-r8). The thread is the world: its vtable FAKE_VTABLE (slots 4
+# and 5, offsets 0x10 / 0x14), the embedded objects +0x68 / +0x7c too (slot
+# 1, offset 4), the objects +0x4c / +0x50 and g_graphicsDataLock (a global
+# set per case) world objects whose +4 subobject has FAKE_VTABLE (slot 0,
+# the deleting destructor with 1 argument), each sometimes null; +0x60 and
+# +0xa4 world objects or null (freed with the emulator's operator delete).
+# Every callee is probed (the window's Lobby_sub_45ae60, PostMessage, the
+# base class's OnThreadMessage, Shutdown, App_sub_405a50,
+# ~CMenuSharedData, Net_sub_470170, IsMultiplayer (0 or 1), Reset; in
+# OnThreadMessage, CountStartupStep and SetGameState). OnThreadMessage's
+# ECX is the world + 0x104 ("fastcall": args[0] in ECX).
+CST_OBJECTS = SCRATCH + 29 * SCRATCH_SLOT_BYTES
+
+
+def cst_thread(rng, pool, args):
+    fields = [(0, FAKE_VTABLE, 4), (0x68, FAKE_VTABLE, 4), (0x7c, FAKE_VTABLE, 4),
+              (0x44, rng.choice([0, 1, 1, 2, rng.getrandbits(32)]), 4), (0xb4, rng.randrange(5), 4)]
+    key = rng.randrange(3)
+    fields.append((0xb8, key, 4))
+    for n, offset in enumerate((0x4c, 0x50)):
+        obj = CST_OBJECTS + 0x40 * n
+        fields += [(offset, 0 if rng.random() < 0.2 else WORLD_BASE + obj, 4), (obj + 4, FAKE_VTABLE, 4)]
+    for n, offset in enumerate((0x60, 0xa4)):
+        fields.append((offset, 0 if rng.random() < 0.2 else WORLD_BASE + CST_OBJECTS + 0x100 + 0x40 * n, 4))
+    fields.append((CST_OBJECTS + 0x84, FAKE_VTABLE, 4))
+    return fields
+
+
+def cst_lock(rng, pool, args):
+    return [(0x007a800c, 0 if rng.random() < 0.3 else WORLD_BASE + CST_OBJECTS + 0x80, 4)]
+
+
+def cst_value(rng, pool):
+    return rng.choice([0, 1, 2, rng.randrange(4), rng.getrandbits(32)])
+
+
+def cst_message(rng, pool):
+    return rng.choice([0x800, 0x800, 0x801, 0x801, 0x7ff, 0x802, rng.getrandbits(32)])
+
+
+CST_CALLEES = {
+    0x0045ae60: (2, "thiscall", "probe"),  # Lobby_sub_45ae60 (the main window)
+    0x0060f9b0: (3, "thiscall", "probe"),  # Win32::CWindowBase::PostMessage
+    0x0060f940: (3, "thiscall", "probe"),  # Win32::CWindowedApp::OnThreadMessage
+    0x005b5cb0: (0, "thiscall", "probe"),  # DirectX::CGameAppDraw::Shutdown
+    0x00405a50: (0, "thiscall", "probe"),  # App_sub_405a50
+    0x00467070: (0, "thiscall", "probe"),  # CMenuSharedData::~CMenuSharedData
+    0x00470170: (0, "thiscall", "probe"),  # Net_sub_470170
+    0x004318d0: (0, "thiscall", lambda h: h % 2),  # GameSettings::IsMultiplayer
+    0x00433810: (0, "thiscall", "probe"),  # GameSettings::Reset
+}
+CST_MESSAGE_CALLEES = {
+    **CST_CALLEES,
+    0x00405d90: (1, "thiscall", "probe"),  # CConsoleThread::CountStartupStep
+    0x00405de0: (2, "thiscall", "probe"),  # CConsoleThread::SetGameState
+}
+CST_VIRTUALS = {0: 1, 4: 0, 0x10: 0, 0x14: 0}
+
+SPECS += [
+    Spec("CConsoleThread_CountStartupStep", 0x00405d90, "thiscall", [cst_value], presets=cst_thread,
+         callees=CST_CALLEES),
+    Spec("CConsoleThread_SetGameState", 0x00405de0, "thiscall", [cst_value, string_bool], presets=cst_thread,
+         callees=CST_CALLEES, virtuals=CST_VIRTUALS),
+    Spec("CConsoleThread_OnThreadMessage", 0x00405c20, "fastcall",
+         [lambda rng, pool: WORLD_BASE + 0x104, anything, cst_message, cst_value, string_bool],
+         presets=cst_thread, callees=CST_MESSAGE_CALLEES),
+    Spec("CConsoleThread_LeaveGame", 0x00405990, "thiscall", [], eax_mask=0, presets=cst_thread, globals=cst_lock,
+         callees=CST_CALLEES, virtuals=CST_VIRTUALS),
+    Spec("CConsoleThread_LeaveMenus", 0x00405600, "thiscall", [], eax_mask=0, presets=cst_thread,
+         callees=CST_CALLEES),
+]
