@@ -2136,3 +2136,67 @@ SPECS += [
          eax_mask=0xff, presets=serial_world, exempt_blocks=(0x00411d8c, 0x00411f3c),
          callees={0x0061f39d: (1, "cdecl", "probe", None, serial_atoi_text)}),
 ]
+
+
+# -- GameConfig constructor / destructor, FontName, the campaign ids
+# (game_config_members.cpp, wip/console-r8). `this` is the world. ---------
+# The constructor: the two vector constructors (verified) run, the font
+# name's temporaries too. ignore_bytes: the strings' allocator bytes, an
+# uninitialized byte of the original's frame. The destructor: consistent
+# strings everywhere (string_fields, texts in scratch slots 10..23), the two
+# out-of-line vector destructors probed (dead block 0x40d6ce: the inlined
+# _Tidy(true) of +4 decrementing a shared count; the erase before it has
+# split a shared buffer). FontName: as GameConfig_StartMap
+# on +0x134 (the same inlined copy; dead: 0x41309f a length above npos, and
+# in the copy-to-itself case the _Xran call 0x4130b0 and the erase
+# 0x4130cb / 0x4130f2). The campaign ids: the sorted int vector +0x16c has
+# its real vtable (WCValSortedVector<int>, whose find and comparison run as
+# original code), 0..6 sorted small ids in scratch slot 24 with room for
+# one more (insertAt grows it otherwise, also tested).
+CONFIG_STRING_OFFSETS = (0x04, 0x14, 0x9c, 0xac, 0xc0, 0xd0, 0xe0, 0xf0, 0x100, 0x110, 0x134, 0x15c)
+CONFIG_IDS = SCRATCH + 24 * SCRATCH_SLOT_BYTES
+
+
+def config_all_strings(rng, pool, args):
+    fields = []
+    for n, offset in enumerate(CONFIG_STRING_OFFSETS):
+        more, _ = string_fields(rng, offset, SCRATCH + (10 + n) * SCRATCH_SLOT_BYTES)
+        fields += more
+    return fields
+
+
+def config_font_name(rng, pool, args):
+    fields, _ = string_fields(rng, 0x134, CONFIG_TEXT)
+    return fields
+
+
+def config_campaign_ids(rng, pool, args):
+    length = rng.randrange(7)
+    ids = sorted(rng.randrange(-2, 12) for _ in range(length))
+    capacity = length + rng.choice([0, 1, 1, 3])
+    fields = [(0x16c, 0x655a0c, 4), (0x170, 0, 4), (0x174, WORLD_BASE + CONFIG_IDS if capacity else 0, 4),
+              (0x178, capacity, 4), (0x17c, length, 4), (0x180, length, 4), (0x184, rng.choice([0, 5]), 4)]
+    for i, v in enumerate(ids):
+        fields.append((CONFIG_IDS + 4 * i, v & 0xFFFFFFFF, 4))
+    return fields
+
+
+def config_campaign_id(rng, pool):
+    return rng.randrange(-3, 13) & 0xFFFFFFFF
+
+
+SPECS += [
+    Spec("GameConfig_Construct", 0x0040d170, "thiscall", [], ignore_bytes=CONFIG_STRING_OFFSETS),
+    Spec("GameConfig_Destruct", 0x0040d470, "thiscall", [], eax_mask=0, presets=config_all_strings,
+         callees={0x004145f0: (0, "thiscall", "probe"),    # ~WCBareVectorBase<int>
+                  0x00414770: (0, "thiscall", "probe")},  # ~WCBareVectorBase<String>
+         exempt_blocks=(0x0040d6ce,)),
+    Spec("GameConfig_FontName", 0x00413070, "thiscall",
+         [lambda rng, pool: WORLD_BASE + (0x134 if rng.random() < 0.1 else CONFIG_OUT + 4 * rng.randrange(8))],
+         presets=config_font_name, globals=null_string_count,
+         exempt_blocks=(0x0041309f, 0x004130b0, 0x004130cb, 0x004130f2)),
+    Spec("GameConfig_HasCampaignId", 0x00413ee0, "thiscall", [config_campaign_id], eax_mask=0xFF,
+         presets=config_campaign_ids),
+    Spec("GameConfig_SetCampaignId", 0x00413f20, "thiscall", [config_campaign_id, string_bool], eax_mask=0,
+         presets=config_campaign_ids),
+]

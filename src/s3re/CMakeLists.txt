@@ -360,6 +360,7 @@ add_library(s3re SHARED
     game/framework/game_config.cpp
     game/framework/game_config_fields.cpp
     game/framework/game_config_serial.cpp
+    game/framework/game_config_members.cpp
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
     game/framework/wait_times.cpp

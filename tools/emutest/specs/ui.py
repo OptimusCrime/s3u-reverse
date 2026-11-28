@@ -2067,6 +2067,18 @@ def gsa_map_file(rng, pool, args):
     return [(0x84, WORLD_BASE + GSA_MAP_FILE, 4), (GSA_MAP_FILE, FAKE_VTABLE, 4)]
 
 
+GSA_SETUPS = SCRATCH + 25 * SCRATCH_SLOT_BYTES
+
+
+def gsa_setups(rng, pool, args):
+    length = rng.choice([0, 1, 2, 3, 0x80000001])
+    return [(0x60, WORLD_BASE + GSA_SETUPS, 4), (0x6c, length, 4)]
+
+
+def gsa_party(h):
+    return 0xFFFFFFFF if h % 2 else h % 8
+
+
 SPECS += [
     Spec("GameSettings_GetRandomSeed", 0x00437050, "thiscall", [], eax_mask=0xffff, max_cases=200),
     Spec("GameSettings_IsSavegame", 0x004373c0, "thiscall", [], eax_mask=0xff, max_cases=200),
@@ -2087,6 +2099,16 @@ SPECS += [
          callees=GS_CHUNK_CALLEES),
     Spec("GameSettings_DeleteMapFile", 0x004373d0, "thiscall", [], eax_mask=0, presets=gsa_map_file,
          virtuals={0: 1}),
+    Spec("GameSettings_ValueC8", 0x00436f70, "thiscall", [], max_cases=200),
+    # The setups in scratch slot 25 (0..3, or a huge length: element
+    # length-1 at a wrapped address, so the party getter is probed). Dead
+    # blocks: the inlined operator[]'s growth of an empty vector (0x431952..
+    # 0x431a5a; the length was checked before).
+    Spec("GameSettings_FirstSetupHasParty", 0x00431900, "thiscall", [], eax_mask=0xff,
+         presets=gsa_setups, callees={**GS_LOCK_CALLEES, 0x0049f590: (0, "thiscall", gsa_party)},
+         exempt_blocks=(0x00431952, 0x00431969, 0x00431971, 0x00431979, 0x00431985, 0x0043199c, 0x004319aa,
+                        0x004319b4, 0x004319d1, 0x004319dc, 0x004319ea, 0x004319f3, 0x004319f5, 0x00431a0f,
+                        0x00431a13, 0x00431a34, 0x00431a47, 0x00431a4c)),
 ]
 
 

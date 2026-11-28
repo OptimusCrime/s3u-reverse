@@ -39,6 +39,16 @@
 //   through its virtual slot 0 (the scalar deleting destructor, flags 1)
 //   when there is one, then clears the pointer. Called by
 //   CLogicThread::OnStart once the world is built. Was Logic_sub_4373d0.
+// GameSettings::ValueC8 (0x00436f70): () -> the dword +0xc8 (read by
+//   CNetThread::OnStart and CNetSession::vf03). Was GameSetup_sub_436f70.
+// GameSettings::FirstSetupHasParty (0x00431900): () -> AL, under the lock:
+//   0 without player setups, else whether the first setup's party (getter
+//   0x49f590) is not -1. The vector's operator[](0) is inlined; with a
+//   length it takes element 0 (or element length-1 for a length above
+//   0x7fffffff, where length-1 is negative); its growth for an empty
+//   vector is dead after the length check. 14 callers (the campaign and
+//   game setup dialogs, NewGame's callers, CNetSession). Was
+//   GameSetup_sub_431900.
 
 #include "game/debug_log.h"
 #include "game/fileformats/map_file.h"
@@ -170,6 +180,30 @@ void __fastcall GameSettings_DeleteMapFile(GameSettings* self, void*) {
     self->map_file = nullptr;
 }
 
+// Purpose: A value of the settings the network code reads (unknown).
+std::uint32_t __fastcall GameSettings_ValueC8(GameSettings* self, void*) {
+    return self->valueC8;
+}
+
+// Purpose: Whether the first player of the setup has been given a party
+// (probably: whether the setup has been filled in).
+std::uint32_t __fastcall GameSettings_FirstSetupHasParty(GameSettings* self, void*) {
+    using PartyFn = std::uint32_t(__fastcall*)(const GamePlayerSetup* self, void* edx);
+    constexpr std::uintptr_t kParty = 0x0049f590;  // GamePlayerSetup's party getter (verified)
+    constexpr std::uint32_t kNoParty = 0xffffffffu;
+    GameLock lock(self->lock);
+    const std::uint32_t length = self->player_setups.length;
+    if (length == 0) {
+        return 0;
+    }
+    const auto last = static_cast<std::int32_t>(length - 1);
+    const std::int32_t index = last >= 0 ? 0 : last;
+    const GamePlayerSetup* setup = reinterpret_cast<const GamePlayerSetup*>(
+        reinterpret_cast<std::uintptr_t>(self->player_setups.data) +
+        static_cast<std::uint32_t>(index) * sizeof(GamePlayerSetup));
+    return reinterpret_cast<PartyFn>(kParty)(setup, nullptr) != kNoParty ? 1 : 0;
+}
+
 using SeedGetterFn = std::uint16_t(__fastcall*)(const GameSettings* self, void* edx);
 using ByteGetterFn = std::uint8_t(__fastcall*)(const GameSettings* self, void* edx);
 using AddressGetterFn = msvc6::String*(__fastcall*)(GameSettings* self, void* edx);
@@ -200,6 +234,9 @@ S3RE_HOOK(0x00437060, GameSettings_RequestSlotInfos, ActionFn, Original_GameSett
           GameSettings_RequestSlotInfos);
 S3RE_HOOK(0x00436f80, GameSettings_RandomMapParams, RandomMapParamsFn, Original_GameSettings_RandomMapParams,
           GameSettings_RandomMapParams);
+S3RE_HOOK(0x00436f70, GameSettings_ValueC8, LockedGetterFn, Original_GameSettings_ValueC8, GameSettings_ValueC8);
+S3RE_HOOK(0x00431900, GameSettings_FirstSetupHasParty, LockedGetterFn, Original_GameSettings_FirstSetupHasParty,
+          GameSettings_FirstSetupHasParty);
 S3RE_HOOK(0x004373d0, GameSettings_DeleteMapFile, ActionFn, Original_GameSettings_DeleteMapFile,
           GameSettings_DeleteMapFile);
 
@@ -245,6 +282,23 @@ S3RE_TEST(GameSettingsAccess_GettersMatchOriginal) {
     CompareGetter(ctx, Original_GameSettings_GoodsObjective, &GameSettings_GoodsObjective, 0xff);
     CompareGetter(ctx, Original_GameSettings_LocalPlayerId, &GameSettings_LocalPlayerId, 0xffffffffu);
     CompareGetter(ctx, Original_GameSettings_TeamCount, &GameSettings_TeamCount, 0xffffffffu);
+    CompareGetter(ctx, Original_GameSettings_ValueC8, &GameSettings_ValueC8, 0xffffffffu);
+    // FirstSetupHasParty: an empty vector or one of 1..3 setups whose
+    // first party is -1 or not.
+    for (int i = 0; i < 200; ++i) {
+        RandomSettings settings(ctx);
+        GamePlayerSetup setups[3];
+        ctx.rng().Fill(setups, sizeof(setups));
+        if (ctx.rng().Chance(1, 2)) {
+            setups[0].party = 0xffffffffu;
+        }
+        settings.get()->player_setups.data = setups;
+        settings.get()->player_setups.length = ctx.rng().Below(4);
+        if (!S3RE_EXPECT_EQ(Original_GameSettings_FirstSetupHasParty(settings.get(), nullptr) & 0xff,
+                            GameSettings_FirstSetupHasParty(settings.get(), nullptr) & 0xff)) {
+            return;
+        }
+    }
     for (int i = 0; i < 20; ++i) {
         RandomSettings settings(ctx);
         S3RE_EXPECT_EQ(reinterpret_cast<std::uintptr_t>(Original_GameSettings_String18(settings.get(), nullptr)),

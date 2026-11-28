@@ -97,18 +97,28 @@ struct GameConfig {
     std::uint8_t unk06d[3];
     std::uint32_t screen_layout;       // +0x70 0/1/2 = 640x480/800x600/1024x768 (CDrawer::ApplyScreenLayout 0x4c6d40)
     std::uint32_t dwords74[9];         // +0x74..+0x94 (getters 0x412300 .. 0x412370; +0x88 has none)
-    std::uint8_t unk098[0xc0 - 0x98];  // +0x98 a byte and a string (+0x9c), set by 0x412380 / 0x4125c0
+    std::uint8_t byte98;               // +0x98 set by 0x412380, returned by 0x4125c0
+    std::uint8_t unk099[3];
+    msvc6::String string9c;            // +0x9c set by 0x412380 / read by 0x4125c0
+    msvc6::String stringAC;            // +0xac the same
+    std::uint8_t byteBC;               // +0xbc the same
+    std::uint8_t unk0bd[3];
     msvc6::String paths[6];            // +0xc0..+0x110 the data paths GameConfig::PathString 0x412b00 copies out
-    std::uint8_t unk120[0x148 - 0x120];
+    std::uint32_t dwords120[5];        // +0x120..+0x130 0, 5, -2, 0x1c, 16 from GameConfig::GameConfig 0x40d170
+    msvc6::String font_name;           // +0x134 "MS Sans Serif" (GameConfig::FontName 0x413070 copies it out)
+    std::uint32_t dword144;            // +0x144 15 from the constructor
     std::uint32_t lobby_pair148[2];    // +0x148 two values the lobby dialog reads and stores (0x413b80 / 0x413ba0)
     std::uint8_t byte150;              // +0x150 read by the main menu and the load dialog (0x413bc0)
-    std::uint8_t unk151[0x158 - 0x151];
+    std::uint8_t unk151[3];
+    std::uint32_t dword154;            // +0x154 -1 from the constructor
     std::uint8_t random_race_amazons;  // +0x158 copied to GameSettings +0xcc by 0x431ab0
     std::uint8_t gfx_group61;          // +0x159 CGraphicsData::Open loads GFX group 61 only when set (getter 0x413be0)
     std::uint8_t byte15a;              // +0x15a (0x414020)
     std::uint8_t unk15b;
     msvc6::String start_map;           // +0x15c probably the map to start from the command line (0x413c20 / 0x413d50)
-    std::uint8_t unk16c[0x189 - 0x16c];
+    std::uint8_t campaign_ids[0x1c];   // +0x16c a WCValSortedVector<int> (watcom::VectorBase; HasCampaignId 0x413ee0 /
+                                       //       SetCampaignId 0x413f20; probably the campaign missions done)
+    std::uint8_t campaign_ids_changed; // +0x188 set by SetCampaignId
     std::uint8_t unk189;               // +0x189 weakens computer players in campaigns (GetMemberByte189; set by 0x414040)
 };
 static_assert(offsetof(GameConfig, string04) == 0x04);
@@ -127,6 +137,12 @@ static_assert(offsetof(GameConfig, random_race_amazons) == 0x158);
 static_assert(offsetof(GameConfig, byte15a) == 0x15a);
 static_assert(offsetof(GameConfig, start_map) == 0x15c);
 static_assert(offsetof(GameConfig, unk189) == 0x189);
+static_assert(offsetof(GameConfig, string9c) == 0x9c);
+static_assert(offsetof(GameConfig, byteBC) == 0xbc);
+static_assert(offsetof(GameConfig, font_name) == 0x134);
+static_assert(offsetof(GameConfig, dword154) == 0x154);
+static_assert(offsetof(GameConfig, campaign_ids) == 0x16c);
+static_assert(offsetof(GameConfig, campaign_ids_changed) == 0x188);
 
 // A colour as three uint32 channels (g_playerColours).
 struct ColourChannels {
