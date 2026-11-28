@@ -22,6 +22,19 @@ settlerdraw-r7 and libs-r7; all worktrees are removed. The round's
 evidence run is done (full emulator suite, self-test, whole-game checks
 against the original: all identical; session 58 entry).
 
+**Round 8 is running (session 59, started 2026-11-28):** five worktree
+agents from a78aa0b, branches wip/landscape-r8 (CLandscapeSurface,
+Render_sub_54cbd0, Render_sub_4b26c0, DoFlip), wip/logic-r8
+(CLogicThread Step/OnStart/PrepareDrawData, tutorial, save slots,
+MessageQueue Push/Pop), wip/events-r8 (CLogicThread::ProcessEvents
+0x524fa0, 65 KB), wip/dialog-r8 (Dirk/dialog.cpp controls),
+wip/console-r8 (ConsoleInit/Console/DGlobals/GameParams, mainwindow).
+Worktrees at ..\s3re-<name>. They don't edit LOGBOOK.md or the progress
+files; merge them one at a time (re/functions.csv per row), regenerate
+progress, then the full emulator suite and the whole-game checks. If a
+session restarts mid-round: check each branch's last pushed commit.
+Jobs 1 and 5 below are in this round.
+
 **Next jobs, in order:**
 1. Render_sub_4b26c0 (the next piece of the frame drawer's tree after
    DrawPanel and QueueSettler); it needs the landscape renderer
