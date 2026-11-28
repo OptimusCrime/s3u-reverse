@@ -795,4 +795,8 @@ inline constexpr GameText kSettlerTypeTodoLog{0x6a000c};     // "Art der Figur: 
 inline constexpr GameText kIllegalAnimationLog{0x6a0034};    // "Illegale Animation bei Figur, Anim Nr. %u"
 inline constexpr GameText kSettlerTodoLog{0x6a0060};         // "art %u, owner %u, todo %u, todocount %u"
 inline constexpr GameText kSuspiciousTodoCountLog{0x6a0088}; // "extrem verdächtiger todocount"
+
+// ------------------------------------------------------------ wip/dialog-r8 batch
+// Dirk\dialog.cpp (CScreenElement::PostMessage's assert).
+inline constexpr GameText kNotConnectedToScreen{0x697730};  // "Not connected to screen"
 }  // namespace s3re::game::texts

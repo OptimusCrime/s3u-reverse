@@ -2049,3 +2049,151 @@ SPECS += [
          # the buffer is unshared or frozen).
          exempt_blocks=(0x00418aed, 0x00418b0a, 0x00418b0e)),
 ]
+
+
+# -- wip/dialog-r8 batch 1: small members of dialog.cpp (ui_dialog_setters.cpp)
+#
+# `this` at DLG_THIS (world offset; fields on both sides lazily random). An
+# element part with the fake vtable sits at this (dlg_element) or behind a
+# vbptr at this + delta (dlg_vb: vbtable in scratch slot 6, displacement
+# 0x100). Every S3.EXE callee is probed (DLG_CALLEES); the allocator and
+# the member-function pointer of NewLink / CFunctor2::Invoke point at
+# trivial S3.EXE functions used as probe addresses (DLG_ALLOC_PROBE: 0
+# arguments, ECX recorded; DLG_METHOD_PROBE: 2 arguments).
+DLG_THIS = MEMBER_THIS
+DLG_OTHER = MEMBER_A
+DLG_LINKS = MEMBER_B
+DLG_ALLOC_PROBE = 0x004289d0   # UI_sub_4289d0 (mov eax, 7FFFFFFDh; ret), not called by these functions
+DLG_METHOD_PROBE = 0x0041abd0  # Win32::CMessageQueue::vf02 (ret 0Ch), not called by these functions
+
+
+def dlg_pointer_or_null(h):
+    return 0 if h % 4 == 0 else WORLD_BASE + DLG_LINKS + 4 * ((h >> 8) % 8)
+
+
+def dlg_pointer(h):
+    return WORLD_BASE + DLG_LINKS + 4 * ((h >> 8) % 8)
+
+
+def dlg_check_result(h):
+    return DDERR_SURFACELOST if h % 3 == 0 else hresult_from(h >> 2)
+
+
+DLG_CALLEES = {
+    0x416190: (2, "thiscall", "probe"), 0x4168c0: (0, "stdcall", "probe"), 0x5faaa0: (2, "thiscall", "probe"),
+    0x413d70: (1, "thiscall", "probe"), 0x420eb0: (0, "thiscall", "probe"), 0x41e330: (1, "thiscall", "probe"),
+    0x418810: (1, "thiscall", "probe"), 0x425b50: (0, "thiscall", "probe"), 0x4242a0: (1, "thiscall", "probe"),
+    0x4243b0: (1, "thiscall", "probe"), 0x4252c0: (0, "thiscall", "probe"), 0x4258f0: (0, "thiscall", "probe"),
+    0x60bab0: (1, "thiscall", dlg_pointer_or_null), 0x60bbe0: (1, "thiscall", dlg_pointer),
+    0x429a80: (1, "thiscall", "probe"), 0x429b50: (1, "thiscall", "probe"),
+    0x5bf2e0: (2, "thiscall", dlg_check_result), 0x6119b0: (1, "thiscall", "throw"),
+    DLG_ALLOC_PROBE: (0, "thiscall", dlg_pointer_or_null), DLG_METHOD_PROBE: (2, "thiscall", "probe"),
+}
+DLG_VIRTUALS = {0x00: 1, 0x1c: 0, 0x7c: 5}
+
+
+def dlg_vb(delta, at=DLG_THIS, displacement=0x100):
+    """A vbptr at `at` + delta whose virtual base (with the fake vtable) is
+    `displacement` bytes after it."""
+    return [(at + delta, WORLD_BASE + MEMBER_VBTABLE, 4), (MEMBER_VBTABLE + 4, displacement, 4),
+            (at + delta + displacement, FAKE_VTABLE, 4)]
+
+
+def dlg_presets(*parts):
+    """Presets from fixed lists and callables (rng -> list)."""
+    def presets(rng, pool, args):
+        out = []
+        for part in parts:
+            out += part(rng) if callable(part) else part
+        return out
+    return presets
+
+
+def dlg_spec(name, address, args, presets=None, **kwargs):
+    kwargs.setdefault("callees", DLG_CALLEES)
+    kwargs.setdefault("virtuals", DLG_VIRTUALS)
+    return Spec(name, address, "fastcall", [one_of(WORLD_BASE + DLG_THIS), anything, *args],
+                presets=presets, **kwargs)
+
+
+def dlg_small_or_any(rng, pool):
+    return rng.choice([0, 1, 2, 3, rng.getrandbits(32)])
+
+
+def dlg_count(offset):
+    return lambda rng: [(DLG_THIS + offset, rng.randint(-2, 5) & 0xFFFFFFFF, 4)]
+
+
+def dlg_field_choice(offset, *values):
+    return lambda rng: [(DLG_THIS + offset, rng.choice(values), 4)]
+
+
+DLG_ELEMENT = [(DLG_THIS, FAKE_VTABLE, 4)]
+DLG_PARENT = [WORLD_BASE + DLG_OTHER] * 3 + [0]
+
+SPECS += [
+    dlg_spec("CScreen_GetScreen", 0x00417f90, []),
+    dlg_spec("CButton_IsChecked", 0x0041a9a0, [], eax_mask=0xFF),
+    dlg_spec("CStaticSurface_GetSurface", 0x0041df30, []),
+    dlg_spec("CListBox_GetItems", 0x0041f240, []),
+    dlg_spec("CListBox_GetSelection", 0x0041f3a0, []),
+    dlg_spec("CListView_GetFullyVisibleLineCount", 0x00424570, []),
+    dlg_spec("CListView_GetLineCount", 0x00424580, []),
+    dlg_spec("CListView_GetDefaultLineHeight", 0x004245b0, []),
+    dlg_spec("CImageButton_SetGfxFile", 0x0041acb0, [anything]),
+    dlg_spec("CStaticText_SetFont", 0x0041ca50, [anything]),
+    dlg_spec("CColumn_SetTooltipTextId", 0x004276a0, [anything]),
+    dlg_spec("CDialog_SetDefaultButton", 0x00427920, [anything]),
+    dlg_spec("CDialog_SetCancelButton", 0x00427930, [anything]),
+    dlg_spec("CStaticText_SetHighlight", 0x0041ca20, [anything], presets=dlg_presets(DLG_ELEMENT)),
+    dlg_spec("CStaticText_SetColor", 0x0041ca30, [anything], presets=dlg_presets(DLG_ELEMENT)),
+    dlg_spec("CStaticImage_SetImage", 0x0041d7c0, [anything], presets=dlg_presets(DLG_ELEMENT)),
+    dlg_spec("CStaticFrame_SetFrame", 0x0041d9c0, [anything, anything], presets=dlg_presets(DLG_ELEMENT)),
+    dlg_spec("CStaticColorIndexedFrame_SetFrame", 0x0041dbc0, [anything] * 3, presets=dlg_presets(DLG_ELEMENT)),
+    dlg_spec("CImageButton_SetImages", 0x0041acc0, [anything] * 4, presets=dlg_presets(dlg_vb(4))),
+    dlg_spec("CTextButton_SetStyle", 0x0041b960, [anything], presets=dlg_presets(dlg_vb(4))),
+    dlg_spec("CEditControl_OnFocusChanged", 0x00419b10, [anything], presets=dlg_presets(dlg_vb(-0x6c))),
+    dlg_spec("CScreen_InitDialogs", 0x00417f30, [anything, anything], presets=dlg_presets(dlg_vb(4))),
+    dlg_spec("CTextView_SetMaxLines", 0x00420d40, [dlg_small_or_any],
+             presets=dlg_presets(dlg_field_choice(0x420, 0, 1, 2, 3))),
+    dlg_spec("CTextView_Clear", 0x00420730, []),
+    dlg_spec("CTextView_ScrollTo", 0x00420d60, [anything], presets=dlg_presets(dlg_vb(4))),
+    dlg_spec("CListView_ScrollTo", 0x00425110, [anything], presets=dlg_presets(dlg_vb(4))),
+    dlg_spec("CStaticText_SetTextId", 0x0041c9f0, [anything], presets=dlg_presets(DLG_ELEMENT)),
+    dlg_spec("CDropdown_SetEnabled", 0x00422460, [dlg_small_or_any],
+             presets=dlg_presets([(DLG_THIS + 0x1c8, FAKE_VTABLE, 4)])),
+    # 0x41a57d passes a null `this` to the functor: dead, `this` was just
+    # dereferenced (+0x3c).
+    dlg_spec("CEditControl_NotifyRejectedChar", 0x0041a570, [], exempt_blocks=(0x0041a57d,),
+             presets=dlg_presets(dlg_vb(4), dlg_field_choice(0x3c, 0, WORLD_BASE + DLG_OTHER),
+                                 [(DLG_OTHER, FAKE_VTABLE, 4)])),
+    # The bound object at DLG_OTHER: its vbptr (+4) -> a vbtable with small
+    # entries; the method a probe; the vbtable index 0 or 4.
+    dlg_spec("CFunctor2_Invoke", 0x004281a0, [anything, anything],
+             presets=dlg_presets(lambda rng: [
+                 (DLG_THIS + 4, WORLD_BASE + DLG_OTHER, 4), (DLG_OTHER + 4, WORLD_BASE + MEMBER_VBTABLE, 4),
+                 (MEMBER_VBTABLE, rng.randint(-0x80, 0x80) & 0xFFFFFFFF, 4),
+                 (MEMBER_VBTABLE + 4, rng.randint(-0x80, 0x80) & 0xFFFFFFFF, 4),
+                 (DLG_THIS + 8, DLG_METHOD_PROBE, 4), (DLG_THIS + 0xc, rng.randint(-0x40, 0x40) & 0xFFFFFFFF, 4),
+                 (DLG_THIS + 0x10, rng.choice([0, 4]), 4)])),
+    dlg_spec("CListView_OnResized", 0x004268c0, [anything, anything]),
+    dlg_spec("CListView_Clear", 0x00423a20, [], presets=dlg_presets(dlg_count(0xdc), dlg_count(0xf8))),
+    dlg_spec("CListView_RemoveAllLines", 0x00423a70, [], presets=dlg_presets(dlg_count(0xf8))),
+    # 0x424e92: base_insert failed (only out of memory; find just failed, so
+    # no duplicate): reads address 0.
+    dlg_spec("CListView_GetCell", 0x00424e60, [anything, anything], exempt_blocks=(0x00424e92,)),
+    dlg_spec("WCSkipListBase_insert", 0x00428180, [anything]),
+    dlg_spec("WCValOrderedVector_CColumn_resize", 0x00429940, [dlg_small_or_any],
+             presets=dlg_presets(dlg_field_choice(0x14, 0, 1, 2, 3, 4, 5))),
+    dlg_spec("WCValOrderedVector_CLine_resize", 0x00429960, [dlg_small_or_any],
+             presets=dlg_presets(dlg_field_choice(0x14, 0, 1, 2, 3, 4, 5))),
+    dlg_spec("WCValSList_bool_NewLink", 0x004298d0, [one_of(WORLD_BASE + DLG_OTHER, WORLD_BASE + DLG_OTHER + 3)],
+             presets=dlg_presets(dlg_field_choice(0x10, 0, DLG_ALLOC_PROBE)), new_fails=0.3),
+    Spec("DirectX_CSurface_DDGetDC", 0x00419ae0, "thiscall", [anything], presets=surface_objects,
+         virtuals={0x44: (2, {}, {"com": True, "returns": hresult_from})}, callees=DLG_CALLEES),
+    Spec("CScreenElement_ReleaseDC", 0x00416080, "fastcall", [anything, anything, one_of(WORLD_BASE), anything],
+         presets=surface_objects, virtuals={0x68: (2, {}, {"com": True, "returns": hresult_from})},
+         callees=DLG_CALLEES),
+    dlg_spec("CScreenElement_PostMessage", 0x004160f0, [anything] * 5,
+             presets=dlg_presets(dlg_vb(4, at=DLG_OTHER), dlg_field_choice(0x18, *DLG_PARENT))),
+]

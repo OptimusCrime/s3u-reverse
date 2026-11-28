@@ -16,7 +16,7 @@ disagree, the code decides; one conflict was settled at the merge:
 119 proposals in ui1.tsv (93 high, 26 medium). 27 target rows skipped: 26 already
 have correct names (RTTI constructors/destructors such as `CButton::CButton`,
 `CStaticText::~CStaticText`, the WC sorted-vector destructors), and one is
-unknown (`UI_sub_41ca20`, CStaticText +0x38 flag setter; Draw selects font 6 when
+unknown (`UI_sub_41ca20`, CStaticText +0x38 flag setter, named `CStaticText::SetHighlight` in wip/dialog-r8: CListView::SetSelection sets it on the selected line's text cells; Draw selects font 6 when
 the flag is set in style 5, but that isn't enough to name it).
 
 ### Message types and vtable slots (CScreenElement, 32 slots, by slot number)
