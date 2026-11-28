@@ -67,4 +67,37 @@ std::uintptr_t InlinedVectorAt(watcom::VectorBase* vector, std::int32_t index) {
     return at(vector->data, 0);
 }
 
+// The variant that grows an empty vector without capacity through an
+// out-of-line resize(1) (0x437d00 / 0x437820 / 0x4382a0 / 0x438070, by the
+// element type): when that returns 0, element 0 of the old block; with
+// `ClampLength`, a length above 1 afterwards becomes 1 (never: it is 0).
+template <std::uint32_t ElementSize, std::uintptr_t Resize, bool ClampLength>
+std::uintptr_t InlinedVectorAtResize(watcom::VectorBase* vector, std::int32_t index) {
+    using ResizeFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t length);
+    using NotifyFn = void(__fastcall*)(void* self, void* edx, std::uint32_t argument);
+    auto at = [vector](std::int32_t i) {
+        return static_cast<std::uintptr_t>(vector->data + static_cast<std::uint32_t>(i) * ElementSize);
+    };
+    const std::uint32_t length = vector->length;
+    const auto last = static_cast<std::int32_t>(length - 1);
+    if (index >= 0 && index <= last) {
+        return at(index);
+    }
+    if (length != 0) {
+        return at(index < 0 ? 0 : last);
+    }
+    if (vector->capacity == 0) {
+        if (reinterpret_cast<ResizeFn>(Resize)(vector, nullptr, 1) == 0) {
+            return at(0);
+        }
+        if (ClampLength && vector->length > 1) {
+            vector->length = 1;
+        }
+    }
+    const auto* vtable = reinterpret_cast<const NotifyFn*>(static_cast<std::uintptr_t>(vector->vtable));
+    vtable[1](vector, nullptr, 0);
+    vector->length = 1;
+    return at(0);
+}
+
 }  // namespace s3re::game

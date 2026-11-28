@@ -2284,3 +2284,60 @@ SPECS += [
          presets=player_setup_vector, callees={**GS_LOCK_CALLEES, 0x0049ec80: (0, "stdcall", "probe")},
          virtuals={0x0c: (3, {0: ((0x10, 4),), 2: 4})}),
 ]
+
+
+# -- GameSettings::TeamLayoutKind / SetPlayerType (game_settings_counts.cpp,
+# wip/console-r8). The settings are the world. TeamLayoutKind: the team
+# vector +0x3c (FAKE_VTABLE, slot 1 the notification) with 0..3 teams (2
+# most of the time) in scratch slot 28, sometimes an empty vector without
+# capacity. The inlined operator[]'s clamp and growth are dead: with two
+# teams it is asked for 0 and 1, otherwise for indexes below the length
+# (0x436c84..0x436d2b, 0x436e2f..0x436f0b; a length of 0x80000000 or more
+# would loop 2^31 times); the team test GameSetup_sub_4a0950 (4 arguments) is probed with
+# a random AL (true 3 times in 4, so each "all teams pass" result occurs);
+# the index check (verified) runs; the two resizes are probed (1 or 0);
+# Option2A runs (ours). SetPlayerType: player_setup_vector's presets, the
+# setup's type 0..3 read by its getter (probed: 0..3), the network call
+# Net_sub_4717e0, SetType, the id getter, resize and TeamLayoutKind
+# probed.
+GSL_TEAM_BLOCK2 = SCRATCH + 28 * SCRATCH_SLOT_BYTES
+
+
+def gstl_teams(rng, pool, args):
+    count = 2 if rng.random() < 0.7 else rng.randrange(4)
+    capacity = rng.choice([count, 0, 4])
+    return [(0x3c, FAKE_VTABLE, 4), (0x3c + 8, WORLD_BASE + GSL_TEAM_BLOCK2, 4), (0x3c + 0xc, capacity, 4),
+            (0x3c + 0x10, min(count, 4), 4), (0x3c + 0x14, count, 4), (0x2a, rng.choice([0, 1]), 1)]
+
+
+def gstl_test(h):
+    return 0 if h % 4 == 0 else 1
+
+
+GSTL_LAYOUT_CALLEES = {
+    0x004a0950: (4, "thiscall", gstl_test),                    # GameSetup_sub_4a0950 (the team test)
+    0x004382a0: (1, "thiscall", lambda h: h % 2),              # a team vector resize (GameSetup_sub_4382a0)
+    0x00437d00: (1, "thiscall", lambda h: h % 2),              # WCValSortedVector<CTeam>::resize
+}
+
+SPECS += [
+    Spec("GameSettings_TeamLayoutKind", 0x00436b90, "thiscall", [], presets=gstl_teams, callees=GSTL_LAYOUT_CALLEES,
+         virtuals={4: 1},
+         exempt_blocks=(0x00436c84, 0x00436c88, 0x00436c9d, 0x00436ca9, 0x00436cad, 0x00436cbd, 0x00436cf2,
+                        0x00436cf6, 0x00436d0b, 0x00436d17, 0x00436d1b, 0x00436d2b, 0x00436e33, 0x00436e48,
+                        0x00436e59, 0x00436e5e, 0x00436e61, 0x00436e75, 0x00436e7d, 0x00436ebb, 0x00436ed0,
+                        0x00436ee1, 0x00436ee6, 0x00436ee9, 0x00436efd, 0x00436f05, 0x00436e2f, 0x00436e79,
+                        0x00436e81, 0x00436e83, 0x00436eb7, 0x00436f01, 0x00436f09, 0x00436f0b)),
+    # Dead blocks 0x434869 / 0x4348f4 / 0x43497e: the length clamps after
+    # the growth (the length is 0 on that path).
+    Spec("GameSettings_SetPlayerType", 0x004347f0, "thiscall", [setup_index, lambda rng, pool: rng.randrange(4)],
+         eax_mask=0, presets=player_setup_vector,
+         callees={**GS_LOCK_CALLEES,
+                  0x0049f350: (0, "thiscall", lambda h: h % 4),  # the type getter
+                  0x0049f4d0: (0, "thiscall", "probe"),           # the network id getter
+                  0x004717e0: (2, "thiscall", "probe"),           # Net_sub_4717e0
+                  0x0049f360: (1, "thiscall", "probe"),           # GamePlayerSetup::SetType
+                  0x00437820: (1, "thiscall", lambda h: h % 2),   # WCValOrderedVector<CPlayer>::resize
+                  0x00436b90: (0, "thiscall", lambda h: 1 if h % 2 else 4)},  # TeamLayoutKind
+         virtuals={4: 1}, exempt_blocks=(0x00434869, 0x004348f4, 0x0043497e)),
+]
