@@ -2093,7 +2093,7 @@ def save_game_state(rng, pool, args):
                (SG_NAME + 0x20, 0, 1)]
     for i, byte in enumerate(name + b"\0"):
         fields.append((SG_NAME + 0x21 + i, byte, 1))
-    for i, byte in enumerate(b"C:\\Games\\S3\\\0"):
+    for i, byte in enumerate(b"C:\\Games\\S3\\0"):
         fields.append((SG_FOLDER_TEXT + 1 + i, byte, 1))
     folder = WORLD_BASE + SG_FOLDER_TEXT + 1 if rng.random() < 0.5 else 0
     exe = [(SG_GAME_FOLDER, 0, 4), (SG_GAME_FOLDER + 4, folder, 4), (SG_GAME_FOLDER + 8, 12 if folder else 0, 4),
@@ -2533,4 +2533,151 @@ SPECS += [
          # Dead: 0x430c58, the location's destruction after
          # ThrowWin32Error (which always throws).
          exempt_blocks=(0x00430c58,)),
+]
+
+
+# CLogicThread_Step_Impl (logic_step.cpp, wip/logic-r8): the fake thread
+# (LOGIC_THREAD) with its timer, wait set and draw-request event; every
+# callee that is a whole subsystem (the world updates, ExecuteCommands,
+# ProcessEvents, PrepareDrawData, CheckGameEnd, ...) probed, the string and
+# wide-string code, sprintf, NarrowToWideString, App::WaitTime and the
+# DebugLog stub run. The wait set's WaitFor returns ECX (the wait set), so a
+# timer or draw-request event at the wait set's address counts as
+# signalled. MessageQueue::Push is recorded with the message bytes the code
+# writes (the others are stack leftovers in the original). In the
+# fast-forward branch that reaches 0 (g_stepCountdown 1) the original's
+# "signalled" local is a stack leftover (ours keeps the last wait's result):
+# there the timer and the draw-request event are other objects, so neither
+# compares equal on either side.
+STEP_TIMER = LOGIC_THREAD + 0x800    # a waitable with FAKE_VTABLE (slot 0: Wait)
+STEP_LOCK = LOGIC_THREAD + 0x900     # the graphics-data semaphore (FAKE_VTABLE)
+STEP_FORMAT = LOGIC_THREAD + 0xa00   # the save reminder's format, "%d min"
+STEP_WAIT_SET = LOGIC_THREAD + 0x3dc
+
+
+def step_push_record(machine, ecx, args):
+    # The bytes Step writes: 0..2 (0x21, the command, the size), then the
+    # local player (byte 4 of 0xfc / 0xfd) or the sync data (4..8 of 0xfb).
+    data = machine.guest_read(args[0], 12)
+    written = (0, 1, 2, 4, 5, 6, 7, 8) if args[1] == 3 else (0, 1, 2) if data[1] == 0xf1 else (0, 1, 2, 4)
+    return (bytes(data[i] for i in written), args[1], args[2])
+
+
+STEP_WIDE = LOGIC_THREAD + 0xb00    # NarrowToWideString's result characters
+
+
+def step_widen(machine, ecx, args, h):
+    """NarrowToWideString (fastcall: ECX the wide result, EDX the narrow
+    string): modelled, since its mbstowcs reaches CRT heap code the emulator
+    doesn't run. The result: the narrow text's bytes as characters at
+    STEP_WIDE."""
+    from unicorn.x86_const import UC_X86_REG_ECX, UC_X86_REG_EDX
+    ecx = machine.uc.reg_read(UC_X86_REG_ECX)  # (a stack address: not recorded)
+    narrow = machine.uc.reg_read(UC_X86_REG_EDX)
+    ptr, length = struct.unpack("<II", machine.guest_read(narrow + 4, 8))
+    text = machine.guest_read(ptr, length) if ptr else b""
+    wide = b"".join(struct.pack("<H", c) for c in text) + b"\0\0"
+    machine.guest_write(WORLD_BASE + STEP_WIDE, wide)
+    machine.guest_write(ecx, struct.pack("<IIII", 0, WORLD_BASE + STEP_WIDE, length, length))
+    return ecx
+
+
+def step_show_record(machine, ecx, args):
+    """ShowMessage(wstring by value, colour): the text by its characters."""
+    ptr, length = args[1], args[2]
+    return (args[0] & 0xff, machine.guest_read(ptr, 2 * length) if ptr else b"", length, args[3], args[4])
+
+
+STEP_CALLEES = {
+    0x0060b840: (0, "cdecl", "probe", step_widen),  # NarrowToWideString (modelled)
+    0x004fb650: (0, "thiscall", "probe"),   # CGameData::BuildMinimap
+    0x0051b4d0: (0, "thiscall", "probe"),   # CGameData::ClampCamera
+    0x004fce90: (0, "thiscall", "probe"),   # CGameData::FinishInitialising
+    0x00463100: (2, "thiscall", "this"),    # CWin32WaitableBag::WaitFor: the wait set itself
+    0x00524fa0: (0, "thiscall", "probe"),   # CLogicThread::ProcessEvents
+    0x00541170: (0, "thiscall", "probe"),   # CLogicThread::UpdateLobby
+    0x00535990: (0, "thiscall", lambda h: 1 if h % 4 else h & 0xffffffff),  # ExecuteCommands
+    0x004309c0: (3, "thiscall", "probe", None, step_push_record),  # MessageQueue::Push
+    0x005faaa0: (2, "thiscall", lambda h: WORLD_BASE + STEP_FORMAT),  # CGraphicsData::TextAddress
+    0x0051e440: (5, "thiscall", "probe", None, step_show_record),  # CLogicThread::ShowMessage
+    0x004fb520: (1, "thiscall", "probe"),   # CGameData::UpdateMinimapSlice
+    0x0051a420: (0, "thiscall", "probe"),   # CGameData::UpdateAllBorderFlags
+    0x0051f110: (1, "thiscall", "probe"),   # CLogicThread::PrepareDrawData
+    0x004e7810: (0, "thiscall", "probe"),   # CGameData::UpdateEnvironment
+    0x004e05e0: (0, "thiscall", "probe"),   # CGameData::UpdateEconomy
+    0x004e9670: (0, "thiscall", "probe"),   # CGameData::UpdateSettlers
+    0x00550f80: (0, "thiscall", "probe"),   # CComputerPlayer::Step
+    0x0053fbb0: (0, "thiscall", "probe"),   # CLogicThread::UpdateTutorial
+    0x00511c50: (0, "thiscall", lambda h: (h & 0xffffff00) | [0, 1, 0xff, 2][h % 4]),  # CheckGameEnd (AL)
+    0x0051e680: (0, "thiscall", "probe"),   # CLogicThread::AgeMessages
+}
+
+
+def step_thread(rng, pool, args):
+    countdown = rng.choice([0, 0, 0, 0, 1, 2, rng.randrange(900)])
+    signalled = countdown != 1
+    t = LOGIC_THREAD
+    fields = [(t + 0x70, rng.choice([0, 0x100, 0x3f00, rng.getrandbits(32) & ~0xff, rng.getrandbits(32)]), 4),
+              (t + 0x220, rng.choice([0, 0, 1, 2, rng.getrandbits(32)]), 4),
+              (t + 0x3ac, rng.choice([0, 0, 0, 0, 1, 2, 3]), 4),
+              (t + 0x3bc, WORLD_BASE + (STEP_WAIT_SET if signalled and rng.random() < 0.7 else STEP_TIMER), 4),
+              (t + 0x3d8, WORLD_BASE + (STEP_WAIT_SET if signalled and rng.random() < 0.3 else STEP_LOCK), 4),
+              (STEP_WAIT_SET, FAKE_VTABLE, 4), (STEP_TIMER, FAKE_VTABLE, 4), (STEP_LOCK, FAKE_VTABLE, 4)]
+    for i, c in enumerate(b"%d min\0"):
+        fields.append((STEP_FORMAT + i, c, 1))
+    for p in range(20):
+        fields.append((t + 0x350 + 4 * p, 0 if rng.random() < 0.7 else rng.getrandbits(32), 4))
+    # The world: the game objectives, the map (small), the local player and
+    # its map reveal.
+    player = rng.randrange(20)
+    size = rng.choice([0, 1, 3, rng.randrange(12)])
+    tick = rng.choice([0, 28125, 56250, rng.randrange(100000)])
+    timeout, warning = rng.randrange(200), rng.randrange(20)
+    if rng.random() < 0.3:
+        tick = ((timeout * 60000 - warning * 60000) & 0xffffffff) >> 6
+    revealed = PLAYER_RECORDS + player * 0x148
+    fields += [(0x1195dcc, rng.choice([0, 0, 1, rng.randrange(256)]), 1),
+               (0x2d250, rng.choice([0, 0, 0, 1]), 1),
+               (MAP_SIZE, size, 4), (0x2d2d4, player, 4),
+               (0x2d248, timeout, 4), (0x2d24c, warning, 4),
+               (revealed + 0x124, rng.choice([0, 1]), 1),
+               (revealed + 0x128, (tick - rng.choice([0, 1, 234, 235, 236, rng.randrange(1000)])) & 0xffffffff, 4)]
+    step_thread.case = (countdown, tick)
+    return fields
+
+
+def step_globals(rng, pool, args):
+    countdown, tick = step_thread.case
+    last_save = (tick - rng.choice([0, 28125, 56250, 1, rng.randrange(100000)])) & 0xffffffff
+    return [(0x7dfd2c, countdown, 4),                                # g_stepCountdown
+            (0x7dfd44, rng.choice([0, 0, 0, 250, 1]), 4),            # g_logicStartState
+            (0x7deb55, rng.choice([0, 0, 0, 1]), 1),                 # g_worldUpdateDisabled
+            (0x7dfdb0, rng.choice([0, 0, 68, 69, 99, 70]), 4),       # g_campaignMission
+            (0x730f64, rng.choice([-1, -1, -1, 0, 1, 2]) & 0xffffffff, 4),  # g_gameOutcome
+            (0x7ace62, rng.choice([0, 0, 0, 1]), 2),                 # g_simulationPaused
+            (0x7dfd48, tick, 4),                                     # g_gameTick
+            (0x7dfd50, last_save, 4),                                # g_lastSaveTick
+            (0x7deb50, rng.randrange(5), 4),                         # g_global7deb50
+            (0x7a7a42, rng.choice([0, 0, 1]), 1),                    # g_gameSettings.option2a
+            (0x7ace60, rng.choice([0, 1, 126, 127, rng.randrange(128)]), 2),  # g_pileClaimsCursor
+            (0x7a800c, WORLD_BASE + STEP_LOCK, 4),                   # g_graphicsDataLock
+            (0x7e916c, rng.choice([0, 1]), 4)]                       # g_debugSwitch (App::WaitTime)
+
+
+SPECS += [
+    # Dead: the inlined string code of the two texts never sees a shared or
+    # frozen buffer of its own: the temporaries share the fresh buffer
+    # (count 2, then back to 0), so their frees 0x53e013/0x53e044 and
+    # 0x53e35b/0x53e38c can't run; the erase finds the buffer unshared (its
+    # _Split 0x53e0b4..0x53e108 and 0x53e400..0x53e450, _Xlen 0x53e48d, the
+    # shared branch 0x53e4a1..0x53e4aa), erases everything (_Grow(0, false)
+    # is false: 0x53e140; the second's non-zero length 0x53e4cf..0x53e4e3)
+    # and frees an unshared buffer (the count decrements 0x53e169/0x53e16d,
+    # 0x53e508/0x53e50c).
+    Spec("CLogicThread_Step_Impl", 0x0053db30, "logicthread", [], eax_mask=0,
+         presets=step_thread, globals=step_globals, callees=STEP_CALLEES, virtuals={0: 2},
+         exempt_blocks=(0x0053e013, 0x0053e044, 0x0053e0b4, 0x0053e0b9, 0x0053e0e6, 0x0053e108, 0x0053e140,
+                        0x0053e169, 0x0053e16d, 0x0053e35b, 0x0053e38c, 0x0053e400, 0x0053e405, 0x0053e430,
+                        0x0053e450, 0x0053e48d, 0x0053e4a1, 0x0053e4a6, 0x0053e4aa, 0x0053e4cf, 0x0053e4d5,
+                        0x0053e4e3, 0x0053e508, 0x0053e50c)),
 ]

@@ -4,15 +4,18 @@
 // thread vtable, called repeatedly by DirectX::CGameThread::Main. thiscall,
 // no stack arguments, plain `ret` (EAX is not meaningful to the caller).
 //
-// Status: pass-through hook, used for the determinism trace, the command
-// recorder (it registers the logic thread object) and S3RE_EXIT_AFTER_TICKS
+// The hook provides tooling, so it is S3RE_HOOK_ALWAYS (installed in
+// original mode too): the determinism trace, the command recorder (it
+// registers the logic thread object) and S3RE_EXIT_AFTER_TICKS
 // (`s3re_launcher --exit-after-ticks N`), which shuts the game down once the
 // game tick reaches N (when the game was loaded from a savegame with
-// `--load-save`, N ticks after the tick the savegame starts at). Not
-// reimplemented.
+// `--load-save`, N ticks after the tick the savegame starts at). It runs the
+// original Step in original mode and ours (CLogicThread_Step_Impl,
+// logic_step.cpp, wip/logic-r8) otherwise.
 
 #include "crash_log.h"
 #include "game/globals.h"
+#include "game/logic/logic_step.h"
 #include "game/logic/logic_thread_layout.h"
 #include "hooks.h"
 #include "log.h"
@@ -34,7 +37,7 @@ using StepFn = void(__fastcall*)(CLogicThread* self, void* edx);
 
 void __fastcall Hooked_CLogicThread_Step(CLogicThread* self, void* edx);
 
-S3RE_PASSTHROUGH(0x0053db30, CLogicThread_Step, StepFn, Original_CLogicThread_Step,
+S3RE_HOOK_ALWAYS(0x0053db30, CLogicThread_Step, StepFn, Original_CLogicThread_Step,
                  Hooked_CLogicThread_Step);
 
 std::atomic<bool> g_loggedFirstStep{false};
@@ -94,7 +97,11 @@ void __fastcall Hooked_CLogicThread_Step(CLogicThread* self, void* edx) {
     }
     const std::uint32_t base =
         ExitTickBase(g_gameTick);
-    Original_CLogicThread_Step(self, edx);
+    if (hooks::OriginalMode()) {
+        Original_CLogicThread_Step(self, edx);
+    } else {
+        CLogicThread_Step_Impl(self, edx);
+    }
     trace::OnLogicStep(self);
 
     const unsigned long exitAfter = ExitAfterTicks();

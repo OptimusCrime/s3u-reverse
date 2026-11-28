@@ -43,14 +43,16 @@ static_assert(offsetof(MessageLine, lifetime) == 0x10);
 static_assert(offsetof(MessageLine, dirty) == 0x18);
 
 struct CLogicThread {
-    std::uint8_t unk000[0x4c];
+    std::uint8_t unk000[0x44];
+    std::uint32_t started[2];               // +0x044 both set to 1 by Step once FinishInitialising ran (start_state 1)
     std::uint32_t group_selection_changed;  // +0x04c set to 1 by ExecuteCommands 0x10 when the local player's carriers became units (new group 0)
     std::uint8_t unk050[0x20];
     std::uint32_t tick;                // +0x070 the game tick (copied to g_gameTick at the end of each Step); SaveGame passes it to GameSettings::SaveSetup
     std::uint32_t unk074;              // +0x074 cleared by ClearPendingUiRefresh (ui_state.cpp)
     std::uint8_t unk078[0xc];
     std::uint32_t pending_ui_refresh;  // +0x084 turned into the world's refresh_ui (ui_state.cpp)
-    std::uint8_t unk088[0x224 - 0x88];
+    std::uint8_t unk088[0x220 - 0x88];
+    std::uint32_t pause_state;          // +0x220 Step: 0 runs ticks, 1 paused (no tick; set while g_worldUpdateDisabled), 2 one tick then 1
     std::uint32_t save_request_tick;    // +0x224 ExecuteCommands 0xf7/0xfa: game tick of the last multiplayer save request (0 = none)
     std::uint32_t save_failures;        // +0x228 ExecuteCommands 0xf7/0xf9 (multiplayer save)
     std::uint32_t save_acks;            // +0x22c ExecuteCommands 0xf7/0xf8: players that saved
@@ -64,11 +66,12 @@ struct CLogicThread {
     CGameData* world;          // +0x3a0 the world (CGameData)
     std::uint8_t unk3a4[4];
     std::uint32_t setup_3a8;   // +0x3a8 Setup argument 8 (meaning unknown)
-    std::uint8_t unk3ac[4];
+    std::uint32_t start_state;  // +0x3ac Step: 1 = FinishInitialising due (then 0), 2 = NoOp then 3; no tick while non-zero
     std::uint32_t step;        // +0x3b0 the lockstep step the logic runs next (0 before the first)
     std::uint32_t granted_step;  // +0x3b4 the last step the network allowed (StepGrant message)
     std::uint8_t setup_3b8;    // +0x3b8 Setup argument 4 (a byte; meaning unknown)
-    std::uint8_t unk3b9[7];
+    std::uint8_t unk3b9[3];
+    void* timer;               // +0x3bc the Win32::CTimer of the 64 ms ticks (vtable slot 0: Wait(timeout, throw))
     std::uint32_t setup_3c0;   // +0x3c0 Setup argument 1 (meaning unknown)
     MessageQueue* toNet;       // +0x3c4 logic -> network (0x20 step and 0x21 command messages)
     MessageQueue* fromNet;     // +0x3c8 network -> logic (the replies)
@@ -76,11 +79,13 @@ struct CLogicThread {
     void* draw_data;           // +0x3d0 the draw-data buffer being filled (DrawData, 0xc7720 bytes)
     void* draw_event;          // +0x3d4 event set when new draw data was published
     void* draw_request_event;  // +0x3d8 event the draw thread sets to ask for new draw data
-    std::uint8_t unk3dc[0x414 - 0x3dc];
+    std::uint8_t wait_set[0x1c];  // +0x3dc Win32::CWin32WaitableBag: Step waits on it (timer, draw request)
+    std::uint8_t unk3f8[0x414 - 0x3f8];
     MessageLine messages[20];  // +0x414 the message lines shown on the screen (a ring)
     std::int32_t message_count;  // +0x644 (ShowMessage 0x51e440)
     std::int32_t message_index;  // +0x648 the current line; ClearMessages sets it to message_count - 1
-    std::uint8_t unk64c[0x654 - 0x64c];
+    std::uint32_t step_time_previous;  // +0x64c the time of the step before (timeGetTime)
+    std::uint32_t step_time;     // +0x650 timeGetTime() at the start of the last step
     std::uint8_t music_stopped;   // +0x654 1 after StopMusic (PlayNextMusicTrack then does nothing)
     std::uint8_t unk655[3];
     std::int32_t music_track;     // +0x658 index in the playlist of the track playing (-1 before the first)
@@ -127,6 +132,12 @@ static_assert(offsetof(CLogicThread, message_index) == 0x648);
 static_assert(offsetof(CLogicThread, lobby) == 0x66c);
 static_assert(offsetof(CLogicThread, lobby_client) == 0x670);
 static_assert(offsetof(CLogicThread, fromNet) == 0x3c8);
+static_assert(offsetof(CLogicThread, started) == 0x44);
+static_assert(offsetof(CLogicThread, pause_state) == 0x220);
+static_assert(offsetof(CLogicThread, start_state) == 0x3ac);
+static_assert(offsetof(CLogicThread, timer) == 0x3bc);
+static_assert(offsetof(CLogicThread, wait_set) == 0x3dc);
+static_assert(offsetof(CLogicThread, step_time) == 0x650);
 
 // The logic thread fields of a CLogicThread pointer or of a test buffer.
 template <typename T>

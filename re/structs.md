@@ -652,6 +652,12 @@ virtual find, slot 3, mode 3), +0x24 WCValOrderedVector<Dirk::CPlayer>
 | 0x644 / 0x648 | message_count / message_index (ClearMessages: index = count - 1) | V |
 | 0x66C / 0x670 | lobby / lobby_client (Setup arguments 9, 10) | V (writes) |
 | 0x675 | desync_detected: set by 0xfb (SyncRandomCheck) | V |
+| 0x044 / 0x048 | started[2]: both set to 1 by Step after FinishInitialising (start_state 1) | V (writes) |
+| 0x220 | pause_state: Step runs a tick only when it is not 1; 2 = one tick, then 1; set to 1 while g_worldUpdateDisabled | V |
+| 0x3AC | start_state: Step calls FinishInitialising at 1 (then 0), the no-op 0x59f200 at 2 (then 3); no step work while non-zero | V |
+| 0x3BC | timer: the Win32::CTimer of the 64 ms ticks (OnStart starts it; Step waits on it in its fast-forward branch) | V |
+| 0x3DC | wait_set: Win32::CWin32WaitableBag Step waits on (returns the signalled object: the timer = a tick) | V |
+| 0x64C / 0x650 | step_time_previous / step_time: timeGetTime() of the last two steps | V (writes) |
 
 **MessageQueue** (ring of dwords, Pop 0x430980 / Push 0x4309C0): +0x00 vtable (slot 3: Wait(timeout, flag), throws Win32::CTimeout*), +0x14 buffer, +0x18 capacity (power of two), +0x1C read, +0x20 write, +0x24 count, +0x28 event object (+8 = HANDLE, SetEvent on Push), +0x2C CRITICAL_SECTION*, +0x30 peak count. **V**.
 

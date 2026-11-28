@@ -730,6 +730,9 @@ inline constexpr GameText kPlayGold1Track{0x730c28};     // "xxx CDAUDIOPLAY abo
 inline constexpr GameText kPlayGold2Track{0x730c5c};     // "xxx CDAUDIOPLAY about to play Gold CD2 track #%u"
 inline constexpr GameText kFinishGameCalled{0x730aa4};   // "*** FinishGame() called ***"
 inline constexpr GameText kFinishGameCancelled{0x730a78};  // "*** FinishGame cancelled (already called)"
+// Volker\LogicInit.cpp: CLogicThread::Step (wip/logic-r8).
+inline constexpr GameText kGameEndsInMinutes{0x730a60};  // "Spiel endet in %u min"
+inline constexpr GameText kRevealMapTimeout{0x730a30};   // "xxx GE: TimeOut: darkenmap again! at GIC: %u"
 // Dirk\Draw.cpp: CDrawer::SetDisplayMode.
 inline constexpr GameText kOldDisplayMode{0x698f6c};          // "GFX: Old display mode: %ux%ux%u"
 inline constexpr GameText kSkippingSetDisplayMode{0x698f4c};  // "GFX: Skipping SetDisplayMode"

@@ -30,6 +30,12 @@
 // original code; only the number of non-tick steps between ticks changes.
 // The draw thread keeps its own timer and simply draws fewer frames per
 // tick.
+//
+// Our CLogicThread::Step (game/logic/logic_thread.cpp, wip/logic-r8) calls
+// WaitForLogicTick (tooling/fast.h) instead, which does the same for its
+// wait when --fast is on (g_fastLogicTicks, read once when the DLL loads).
+
+#include "tooling/fast.h"
 
 #include "hooks.h"
 #include "log.h"
@@ -41,11 +47,12 @@
 #include <cstdint>
 
 namespace s3re::tooling {
-namespace {
 
-// Win32::CWin32WaitableBag<Win32::CWin32Waitable> (opaque): the wait set at
-// CLogicThread+0x3dc.
-struct CWin32WaitableBag;
+// Read when the DLL loads (the emulator runs no DLL start-up code, so there
+// it stays false).
+const bool g_fastLogicTicks = GetEnvironmentVariableA("S3RE_FAST", nullptr, 0) > 0;
+
+namespace {
 
 using WaitFn = void*(__fastcall*)(CWin32WaitableBag* self, void* edx, unsigned timeoutMs,
                                   int throwOnTimeout);
@@ -67,12 +74,9 @@ bool FastMode() {
 
 bool g_logged = false;  // only touched by the logic thread
 
-void* __fastcall Hooked_CWin32WaitableBag_WaitFor(CWin32WaitableBag* self, void* edx, unsigned timeoutMs,
-                                                  int throwOnTimeout) {
-    if (!FastMode() ||
-        reinterpret_cast<std::uintptr_t>(_ReturnAddress()) != kStepWaitReturn) {
-        return Original_CWin32WaitableBag_WaitFor(self, edx, timeoutMs, throwOnTimeout);
-    }
+// The wait of the logic step in fast mode: poll, and report the timer when
+// nothing was signalled.
+void* FastLogicWait(CWin32WaitableBag* self, void* edx) {
     const auto logic = reinterpret_cast<std::uintptr_t>(self) - kWaitSetOffset;
     if (!g_logged) {
         g_logged = true;
@@ -87,5 +91,23 @@ void* __fastcall Hooked_CWin32WaitableBag_WaitFor(CWin32WaitableBag* self, void*
     return *reinterpret_cast<void**>(logic + kTimerOffset);
 }
 
+void* __fastcall Hooked_CWin32WaitableBag_WaitFor(CWin32WaitableBag* self, void* edx, unsigned timeoutMs,
+                                                  int throwOnTimeout) {
+    if (!FastMode() ||
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress()) != kStepWaitReturn) {
+        return Original_CWin32WaitableBag_WaitFor(self, edx, timeoutMs, throwOnTimeout);
+    }
+    return FastLogicWait(self, edx);
+}
+
 }  // namespace
+
+void* WaitForLogicTick(CWin32WaitableBag* waitSet, unsigned timeoutMs, int throwOnTimeout) {
+    if (g_fastLogicTicks) {
+        return FastLogicWait(waitSet, nullptr);
+    }
+    using Fn = void*(__fastcall*)(CWin32WaitableBag*, void*, unsigned, int);
+    return reinterpret_cast<Fn>(0x00463100)(waitSet, nullptr, timeoutMs, throwOnTimeout);
+}
+
 }  // namespace s3re::tooling
