@@ -2486,3 +2486,51 @@ SPECS += [
          presets=msg_line_pair, globals=msg_null_count,
          exempt_blocks=(0x00523349, 0x00523354, 0x0052336f, 0x00523396)),
 ]
+
+
+# MessageQueue_Pop / MessageQueue_Push (message_queue.cpp, wip/logic-r8):
+# the queue at world offset 0 (ECX), its ring (2..64 dwords) and the
+# pushed dwords in scratch slots, the event object's handle (+8) random.
+# The queue's count is near the capacity often enough that Push overflows
+# (the throw of a CEventQueueOverflow is compared); SetEvent fails about
+# one call in four (VERIFY's ThrowWin32Error).
+MQ_RING = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+MQ_DWORDS = SCRATCH + 7 * SCRATCH_SLOT_BYTES
+MQ_EVENT = SCRATCH + 8 * SCRATCH_SLOT_BYTES
+
+
+def message_queue_fields(rng, pool, args):
+    capacity = 1 << rng.randrange(1, 7)
+    pushed = args[1] if len(args) > 1 else 0
+    if pushed >= 0x80000000:
+        pushed -= 1 << 32
+    roll = rng.random()
+    if roll < 0.3:
+        count = capacity - pushed + rng.choice([0, 1, -1])  # right at the overflow edge
+    elif roll < 0.9:
+        count = rng.randrange(capacity + 1)
+    else:
+        count = rng.getrandbits(32)
+    peak = rng.choice([0, count, count + 1, count - 1, rng.randrange(capacity + 2), rng.getrandbits(32)])
+    return [(0x14, WORLD_BASE + MQ_RING, 4), (0x18, capacity, 4), (0x1c, rng.randrange(capacity), 4),
+            (0x20, rng.randrange(capacity), 4), (0x24, count & 0xFFFFFFFF, 4), (0x28, WORLD_BASE + MQ_EVENT, 4),
+            (0x30, peak & 0xFFFFFFFF, 4)]
+
+
+def message_queue_push_count(rng, pool) -> int:
+    return rng.choice([0, 1, 2, 3, rng.randrange(8), rng.randrange(70), 0xFFFFFFFF, 0xFFFFFFFE])
+
+
+def message_queue_signal(rng, pool) -> int:
+    return rng.getrandbits(32) if rng.random() < 0.5 else rng.getrandbits(24) << 8
+
+
+SPECS += [
+    Spec("MessageQueue_Pop", 0x00430980, "thiscall", [], presets=message_queue_fields),
+    Spec("MessageQueue_Push", 0x004309c0, "thiscall",
+         [lambda rng, pool: WORLD_BASE + MQ_DWORDS, message_queue_push_count, message_queue_signal],
+         eax_mask=0, presets=message_queue_fields, new_fails=0.1,
+         # Dead: 0x430c58, the location's destruction after
+         # ThrowWin32Error (which always throws).
+         exempt_blocks=(0x00430c58,)),
+]

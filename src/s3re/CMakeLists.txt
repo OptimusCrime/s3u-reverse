@@ -198,6 +198,7 @@ add_library(s3re SHARED
     game/logic/ui_overlays.cpp
     game/logic/ui_state.cpp
     game/logic/victory_conditions.cpp
+    game/logic/message_queue.cpp
 
     # game/logic/commands/: ExecuteCommands and its parts
     game/logic/commands/command_helpers.cpp

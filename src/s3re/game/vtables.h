@@ -372,6 +372,8 @@ inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x67b828;  // Win32::CFi
 inline constexpr std::uintptr_t kCHResultPointer = 0x68ea98;       // Win32::CHResult* (ThrowWin32Error, ThrowHResult)
 inline constexpr std::uintptr_t kCMCIExceptionPointer = 0x68ec98;  // Win32::CMCIException* (ThrowMCIError)
 inline constexpr std::uintptr_t kCMMExceptionPointer = 0x682f68;   // Win32::CMMException* (ThrowMMError)
+// wip/logic-r8
+inline constexpr std::uintptr_t kCEventQueueOverflowPointer = 0x66ed88;  // CEventQueueOverflow* (MessageQueue::Push)
 }  // namespace throw_info
 
 // Type descriptors (catch types).

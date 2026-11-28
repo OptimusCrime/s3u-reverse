@@ -4,6 +4,7 @@
 #include "game/ui/game_settings_layout.h"
 #include "game/globals.h"
 #include "game/logic/logic_thread_layout.h"
+#include "game/logic/message_queue.h"
 #include "game/world/random.h"
 #include "hooks.h"
 #include "log.h"
@@ -29,15 +30,26 @@ namespace {
 
 // MessageQueue::Push (0x004309c0): copies `count` dwords into the ring
 // buffer and, if `signal` (a bool passed as a full stack slot), sets the
-// queue's event. thiscall, ret 0xc.
+// queue's event. thiscall, ret 0xc. Reimplemented (game/logic/
+// message_queue.cpp, wip/logic-r8); the hook stays installed in original
+// mode for the recorder and replay, and pushes through the original code
+// there and through ours otherwise (ForwardPush).
 using PushFn = void(__fastcall*)(MessageQueue* self, void* edx, const std::uint32_t* dwords,
                                  int count, int signal);
 
 void __fastcall Hooked_MessageQueue_Push(MessageQueue* self, void* edx,
                                          const std::uint32_t* dwords, int count, int signal);
 
-S3RE_PASSTHROUGH(0x004309c0, MessageQueue_Push, PushFn, Original_MessageQueue_Push,
+S3RE_HOOK_ALWAYS(0x004309c0, MessageQueue_Push, PushFn, Original_MessageQueue_Push,
                  Hooked_MessageQueue_Push);
+
+void ForwardPush(MessageQueue* self, void* edx, const std::uint32_t* dwords, int count, int signal) {
+    if (hooks::OriginalMode()) {
+        Original_MessageQueue_Push(self, edx, dwords, count, signal);
+    } else {
+        game::MessageQueue_Push(self, edx, dwords, count, static_cast<std::uint32_t>(signal));
+    }
+}
 
 constexpr std::uint8_t kStepMessage = 0x20;
 constexpr std::uint8_t kCommandMessage = 0x21;
@@ -367,7 +379,7 @@ void __fastcall Hooked_MessageQueue_Push(MessageQueue* self, void* edx,
                                          const std::uint32_t* dwords, int count, int signal) {
     void* const logic = g_logicThread.load(std::memory_order_acquire);
     if (logic == nullptr || count <= 0 || self != static_cast<const game::CLogicThread*>(logic)->toNet) {
-        Original_MessageQueue_Push(self, edx, dwords, count, signal);
+        ForwardPush(self, edx, dwords, count, signal);
         return;
     }
     std::vector<std::uint32_t> out;
@@ -383,7 +395,7 @@ void __fastcall Hooked_MessageQueue_Push(MessageQueue* self, void* edx,
         }
     }
     if (!out.empty()) {
-        Original_MessageQueue_Push(self, edx, out.data(), static_cast<int>(out.size()), signal);
+        ForwardPush(self, edx, out.data(), static_cast<int>(out.size()), signal);
     }
 }
 

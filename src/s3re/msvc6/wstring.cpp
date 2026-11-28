@@ -76,6 +76,21 @@
 //   copied (_Copy), an own one truncated for 0 or grown (_Copy) when its
 //   capacity is below the new length; then len and the terminating zero.
 
+// WString_FromWcs (0x0053ba60; wstring(const wchar_t* s, const allocator&)
+//   ret 8, EAX = this; wip/logic-r8): the allocator byte from the argument,
+//   ptr = len = res = 0, wcslen 0x61fe1b (_Xlen above 0x7ffffffd), then the
+//   inlined _Grow(n, true) of the empty string: _Tidy(true), for n > 0
+//   _Copy(n), the words, length and terminator.
+// WString_ConcatWcs (0x00534e50; operator+(const wstring&, const wchar_t*),
+//   cdecl with the result first, EAX = result; wip/logic-r8): a local copy
+//   of the left side (its allocator byte, assign(left, 0, npos)), the
+//   inlined append(text) (_Xlen when the new length reaches 2^32 - 1,
+//   _Grow(len + n, false), the words), the result assigned from the local
+//   (0x428400) and the local freed (inlined).
+// WString_AssignCopy (0x00523a40; operator=(const wstring&) ret 4, EAX =
+//   this; wip/logic-r8): the inlined assign(x, 0, npos) as in 0x428400,
+//   except that the copying branch calls _Grow(n, true) 0x4288a0.
+
 #include "msvc6/game_heap.h"
 #include "msvc6/string.h"
 #include "msvc6/wstring.h"
@@ -546,6 +561,110 @@ WString* __fastcall WString_AssignSubstr(WString* self, void* /*edx*/, const WSt
     return self;
 }
 
+namespace {
+
+// wcslen through the CRT's 0x61fe1b, as the original calls it.
+std::uint32_t GameWcslen(const std::uint16_t* text) {
+    using WcslenFn = std::uint32_t(__cdecl*)(const std::uint16_t*);
+    return reinterpret_cast<WcslenFn>(0x0061fe1b)(text);
+}
+
+}  // namespace
+
+S3RE_HOOK(0x0053ba60, WString_FromWcs, WStringFromWcsFn, Original_WString_FromWcs, WString_FromWcs);
+
+// Purpose: Standard wide string: constructs a string from a zero-terminated
+// wide text (the logic thread's chat and tutorial texts).
+WString* __fastcall WString_FromWcs(WString* self, void* /*edx*/, const std::uint16_t* text,
+                                    const std::uint8_t* allocator) {
+    self->allocator = *allocator;
+    self->ptr = nullptr;
+    self->len = 0;
+    self->res = 0;
+    const std::uint32_t length = GameWcslen(text);
+    if (length > kMaxSize) {
+        GameXlen();
+    }
+    // The inlined _Grow(length, true) of the still empty string (its
+    // shared-buffer branch 0x53baa5..0x53bac6 can't run): _Tidy(true), and
+    // for a text a new buffer.
+    CallTidy(self, 1);
+    if (length == 0) {
+        return self;
+    }
+    CallCopy(self, length);
+    CopyWords(self->ptr, text, length);
+    self->len = length;
+    self->ptr[length] = 0;
+    return self;
+}
+
+S3RE_HOOK(0x00534e50, WString_ConcatWcs, WStringConcatWcsFn, Original_WString_ConcatWcs, WString_ConcatWcs);
+
+// Purpose: Standard wide string: string + text as a new string.
+WString* __cdecl WString_ConcatWcs(WString* result, const WString* left, const std::uint16_t* text) {
+    WString local{};
+    local.allocator = left->allocator;
+    reinterpret_cast<WStringAssignSubstrFn>(0x00428400)(&local, nullptr, left, 0, game::g_wstringNpos);
+    // The inlined append(text).
+    const std::uint32_t n = GameWcslen(text);
+    if (0xFFFFFFFFu - local.len <= n) {
+        GameXlen();
+    }
+    if (n > 0) {
+        const std::uint32_t length = local.len + n;
+        if (CallGrow(&local, length, 0)) {
+            CopyWords(local.ptr + local.len, text, n);
+            local.len = length;
+            local.ptr[length] = 0;
+        }
+    }
+    result->allocator = local.allocator;
+    result->ptr = nullptr;
+    result->len = 0;
+    result->res = 0;
+    reinterpret_cast<WStringAssignSubstrFn>(0x00428400)(result, nullptr, &local, 0, game::g_wstringNpos);
+    if (local.ptr != nullptr) {
+        if (IsShared(local.ptr)) {
+            --RefCount(local.ptr);
+        } else {
+            GameOperatorDelete(BlockOf(local.ptr));
+        }
+    }
+    return result;
+}
+
+S3RE_HOOK(0x00523a40, WString_AssignCopy, WStringAssignCopyFn, Original_WString_AssignCopy, WString_AssignCopy);
+
+// Purpose: Standard wide string: assignment from another string (shares
+// its buffer where it can).
+WString* __fastcall WString_AssignCopy(WString* self, void* /*edx*/, const WString* x) {
+    // The inlined assign(x, 0, npos).
+    std::uint32_t count = x->len;
+    if (game::g_wstringNpos < count) {
+        count = game::g_wstringNpos;
+    }
+    if (self == x) {
+        EraseWords(self, count, game::g_wstringNpos, true);
+        EraseWords(self, 0, 0, false);
+        return self;
+    }
+    if (count > 0 && count == x->len && RefCount(CStr(x)) < kMaxShared) {
+        ReleaseAndClear(self);
+        self->ptr = CStr(x);
+        self->len = x->len;
+        self->res = x->res;
+        ++RefCount(self->ptr);
+        return self;
+    }
+    if (CallGrow(self, count, 1)) {
+        CopyWords(self->ptr, CStr(x), count);
+        self->len = count;
+        self->ptr[count] = 0;
+    }
+    return self;
+}
+
 // ---------------------------------------------------------------------------
 // Tests: operator delete replaced by a recording stub (the freed address,
 // relative to the case's buffer, and EAX fixed by the call); wide strings
@@ -692,7 +811,23 @@ struct WStringOps {
     WStringCopyConstructFn copyConstruct = nullptr;
     WStringConcatWcsLeftFn concatLeft = nullptr;
     WStringSubstrConstructFn substrConstruct = nullptr;
+    WStringFromWcsFn fromWcs = nullptr;
+    WStringConcatWcsFn concatWcs = nullptr;
+    WStringAssignCopyFn assignCopy = nullptr;
 };
+
+// How many operations the random sequence picks from: the ones with a
+// function on both sides.
+int OperationCount(const WStringOps& ops) {
+    return ops.assignCopy != nullptr        ? 16
+           : ops.concatWcs != nullptr       ? 15
+           : ops.fromWcs != nullptr         ? 14
+           : ops.substrConstruct != nullptr ? 13
+           : ops.concatLeft != nullptr      ? 12
+           : ops.copyConstruct != nullptr   ? 11
+           : ops.erase != nullptr           ? 10
+                                            : 8;
+}
 
 // A deliberately wrong assign(x, pos, n): never shares the buffer.
 WString* __fastcall WrongAssignSubstr(WString* self, void* edx, const WString* x, std::uint32_t pos,
@@ -749,7 +884,8 @@ void CompareWStringOperations(test::Context& ctx, const WStringOps& candidate, i
     const WStringOps original{Original_WString_Tidy, Original_WString_Copy, Original_WString_Grow,
                               Original_WString_Split, Original_WString_AssignSubstr, Original_WString_Erase,
                               Original_WString_CopyConstruct, Original_WString_ConcatWcsLeft,
-                              Original_WString_SubstrConstruct};
+                              Original_WString_SubstrConstruct, Original_WString_FromWcs,
+                              Original_WString_ConcatWcs, Original_WString_AssignCopy};
     std::vector<Source> sources(kSources);
     for (int k = 0; k < kSources; ++k) {
         const std::uint32_t length = ctx.rng().Below(k < 3 ? 3 : 80);
@@ -770,9 +906,7 @@ void CompareWStringOperations(test::Context& ctx, const WStringOps& candidate, i
             a[k].allocator = b[k].allocator = static_cast<std::uint8_t>(ctx.rng().Below(256));
         }
         for (int step = 0; step < 40; ++step) {
-            const int op = static_cast<int>(
-                ctx.rng().Below(candidate.substrConstruct != nullptr ? 13 : candidate.concatLeft != nullptr ? 12
-                                : (candidate.copyConstruct != nullptr ? 11 : (candidate.erase != nullptr ? 10 : 8))));
+            const int op = static_cast<int>(ctx.rng().Below(OperationCount(candidate)));
             const int i = static_cast<int>(ctx.rng().Below(kWSlots));
             const int j = static_cast<int>(ctx.rng().Below(kWSlots));
             const WString& source = sources[ctx.rng().Below(kSources)].string;
@@ -810,6 +944,29 @@ void CompareWStringOperations(test::Context& ctx, const WStringOps& candidate, i
                     original.tidy(&a[i], nullptr, 1);
                     candidate.tidy(&b[i], nullptr, 1);
                     break;
+                case 15:
+                    // Slot j assigned to slot i (also onto itself).
+                    resultA = original.assignCopy(&a[i], nullptr, &a[j]) == &a[i];
+                    resultB = candidate.assignCopy(&b[i], nullptr, &b[j]) == &b[i];
+                    break;
+                case 14: {
+                    // string + text constructed over slot i (its old buffer
+                    // leaks; the left side another slot).
+                    if (i != j) {
+                        const std::uint16_t* text = source.ptr != nullptr ? source.ptr : &sources[0].words[1];
+                        resultA = original.concatWcs(&a[i], &a[j], text) == &a[i];
+                        resultB = candidate.concatWcs(&b[i], &b[j], text) == &b[i];
+                    }
+                    break;
+                }
+                case 13: {
+                    // A text constructed over slot i (its old buffer leaks).
+                    const std::uint16_t* text = source.ptr != nullptr ? source.ptr : &sources[0].words[1];
+                    const std::uint8_t allocator = static_cast<std::uint8_t>(flag >> 8);
+                    resultA = original.fromWcs(&a[i], nullptr, text, &allocator) == &a[i];
+                    resultB = candidate.fromWcs(&b[i], nullptr, text, &allocator) == &b[i];
+                    break;
+                }
                 case 12: {
                     // A part of slot j constructed over slot i (its old
                     // buffer leaks).
@@ -881,7 +1038,8 @@ S3RE_TEST(WString_Members_MatchOriginal) {
 S3RE_TEST(WString_Operations_MatchOriginal) {
     CompareWStringOperations(ctx, {&WString_Tidy, &WString_Copy, &WString_Grow, &WString_Split, &WString_AssignSubstr,
                                    &WString_Erase, &WString_CopyConstruct, &WString_ConcatWcsLeft,
-                                   &WString_SubstrConstruct},
+                                   &WString_SubstrConstruct, &WString_FromWcs, &WString_ConcatWcs,
+                                   &WString_AssignCopy},
                              400);
 }
 
@@ -985,6 +1143,54 @@ S3RE_TEST(WString_Members_ComparisonDetectsWrongImplementation) {
     {
         test::Context probe(ctx.name(), 1, /*quiet=*/true);
         CompareCompare(probe, &WrongCompare, 2000);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+}
+
+namespace {
+
+// Wrong: the allocator byte is not taken from the argument.
+WString* __fastcall WrongFromWcs(WString* self, void* edx, const std::uint16_t* text, const std::uint8_t* allocator) {
+    const std::uint8_t mine = 0;
+    return WString_FromWcs(self, edx, text, *allocator == 0 ? allocator : &mine);
+}
+
+// Wrong: the text's last character is left out.
+WString* __cdecl WrongConcatWcs(WString* result, const WString* left, const std::uint16_t* text) {
+    WString_ConcatWcs(result, left, text);
+    if (text[0] != 0 && result->len > 0) {
+        result->len = result->len - 1;
+    }
+    return result;
+}
+
+// Wrong: never shares the buffer.
+WString* __fastcall WrongAssignCopy(WString* self, void* edx, const WString* x) {
+    if (self == x) {
+        return WString_AssignCopy(self, edx, x);
+    }
+    if (WString_Grow(self, nullptr, x->len, 1)) {
+        CopyWords(self->ptr, CStr(x), x->len);
+        self->len = x->len;
+        self->ptr[x->len] = 0;
+    }
+    return self;
+}
+
+}  // namespace
+
+S3RE_TEST(WString_LogicMembers_ComparisonDetectsWrongImplementation) {
+    const WStringOps right{&WString_Tidy,           &WString_Copy,          &WString_Grow,
+                           &WString_Split,          &WString_AssignSubstr,  &WString_Erase,
+                           &WString_CopyConstruct,  &WString_ConcatWcsLeft, &WString_SubstrConstruct,
+                           &WString_FromWcs,        &WString_ConcatWcs,     &WString_AssignCopy};
+    WStringOps wrongs[3] = {right, right, right};
+    wrongs[0].fromWcs = &WrongFromWcs;
+    wrongs[1].concatWcs = &WrongConcatWcs;
+    wrongs[2].assignCopy = &WrongAssignCopy;
+    for (const WStringOps& wrong : wrongs) {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareWStringOperations(probe, wrong, 100);
         S3RE_EXPECT(probe.failures() > 0);
     }
 }

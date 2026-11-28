@@ -70,4 +70,22 @@ using WStringEraseFn = WString*(__fastcall*)(WString* self, void* edx, std::uint
 WString* __fastcall WString_Erase(WString* self, void* edx, std::uint32_t pos, std::uint32_t n);
 extern WStringEraseFn Original_WString_Erase;
 
+// wstring(const wchar_t* s, const allocator& a) (0x0053ba60), ret 8,
+// EAX = this.
+using WStringFromWcsFn = WString*(__fastcall*)(WString* self, void* edx, const std::uint16_t* text,
+                                               const std::uint8_t* allocator);
+WString* __fastcall WString_FromWcs(WString* self, void* edx, const std::uint16_t* text, const std::uint8_t* allocator);
+extern WStringFromWcsFn Original_WString_FromWcs;
+
+// operator+(const wstring& left, const wchar_t* text) (0x00534e50), cdecl,
+// the result object first; EAX = result.
+using WStringConcatWcsFn = WString*(__cdecl*)(WString* result, const WString* left, const std::uint16_t* text);
+WString* __cdecl WString_ConcatWcs(WString* result, const WString* left, const std::uint16_t* text);
+extern WStringConcatWcsFn Original_WString_ConcatWcs;
+
+// operator=(const wstring& x) (0x00523a40), ret 4, EAX = this.
+using WStringAssignCopyFn = WString*(__fastcall*)(WString* self, void* edx, const WString* x);
+WString* __fastcall WString_AssignCopy(WString* self, void* edx, const WString* x);
+extern WStringAssignCopyFn Original_WString_AssignCopy;
+
 }  // namespace s3re::msvc6
