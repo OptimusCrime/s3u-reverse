@@ -799,4 +799,6 @@ inline constexpr GameText kSuspiciousTodoCountLog{0x6a0088}; // "extrem verdäch
 inline constexpr GameText kNetSendSlotInfosRequested{0x699678};  // "NET: SendSlotInfos requested"
                                                                  // (GameSettings::RequestSlotInfos 0x437060)
 inline constexpr GameText kSiedler3Evt{0x6995dc};  // "siedler3.evt" (GameSettings::Reset 0x433810, the text +0x18)
+inline constexpr GameText kInvalidGameState{0x695f0c};  // "Invalid GameState" (CConsoleThread::vf07's assert)
+inline constexpr GameText kConsoleFile{0x695fc8};       // "E:\Siedler3\Dirk\Console.cpp"
 }  // namespace s3re::game::texts

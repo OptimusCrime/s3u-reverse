@@ -851,3 +851,5 @@ address,name,type,status,notes
 0x00699678,texts::kNetSendSlotInfosRequested,char[],identified,"String ""NET: SendSlotInfos requested"" (GameSettings::RequestSlotInfos). Declared in src/s3re/game/texts.h."
 0x00697108,g_serialBlacklist,const char* const[3],identified,"The three blacklisted serial numbers (pointers to texts) GameConfig::IsValidSerial 0x411d10 rejects; contents not quoted. Declared in src/s3re/game/tables.h; used by framework/game_config_serial.cpp."
 0x006995dc,texts::kSiedler3Evt,char[],identified,"String ""siedler3.evt"" (GameSettings::Reset puts it into the settings string +0x18). Declared in src/s3re/game/texts.h."
+0x00695f0c,texts::kInvalidGameState,char[],identified,"String ""Invalid GameState"" (CConsoleThread::vf07's assert). Declared in src/s3re/game/texts.h."
+0x00695fc8,texts::kConsoleFile,char[],identified,"String ""E:\Siedler3\Dirk\Console.cpp"" (the Console.cpp asserts). Declared in src/s3re/game/texts.h."

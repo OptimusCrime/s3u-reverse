@@ -2200,3 +2200,29 @@ SPECS += [
     Spec("GameConfig_SetCampaignId", 0x00413f20, "thiscall", [config_campaign_id, string_bool], eax_mask=0,
          presets=config_campaign_ids),
 ]
+
+
+# -- CConsoleThread::vf06 / vf07, App_DecrementIndex, the string vector's
+# Equals, ostream_ApplyManipulator (console_thread_small.cpp, wip/console-r8).
+# `this` is the world; vf07's state +0x44 is 0, 1 or another value (the
+# assert is probed as a throw). Equals: two strings in scratch (string_world's
+# `this` and second string; a's text pointer is used without a null check,
+# as in the original, so a has a buffer whenever its length is not 0).
+# ApplyManipulator: the manipulator is a small verified function of S3.EXE
+# (App_DecrementIndex as a cdecl callee is not possible), so it is probed:
+# std::string::c_str 0x411fc0 (recorded with its stack argument).
+def cts_state(rng, pool, args):
+    return [(0x44, rng.choice([0, 0, 1, 1, 2, rng.getrandbits(32)]), 4)]
+
+
+SPECS += [
+    Spec("CConsoleThread_vf06", 0x00405b00, "thiscall", [scratch(0)], max_cases=200),
+    Spec("CConsoleThread_vf07", 0x00405b10, "thiscall", [], presets=cts_state,
+         callees={0x006119b0: (1, "thiscall", "throw")}),
+    Spec("App_DecrementIndex", 0x00409e50, "thiscall", [anything], max_cases=200),
+    Spec("WCValOrderedVector_String_Equals", 0x00409bd0, "stdcall",
+         [lambda rng, pool: WORLD_BASE + STRING_SELF, lambda rng, pool: WORLD_BASE + STRING_OTHER],
+         eax_mask=0xff, presets=string_world),
+    Spec("ostream_ApplyManipulator", 0x004063f0, "thiscall", [lambda rng, pool: 0x00411fc0],
+         callees={0x00411fc0: (1, "cdecl", "probe")}),
+]
