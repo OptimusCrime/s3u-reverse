@@ -2071,3 +2071,68 @@ SPECS += [
          callees={0x0060b500: (1, "thiscall", "probe", gdl_get_effect), 0x0060b560: (0, "thiscall", "probe"),
                   0x005b8080: (1, "thiscall", "probe")}),
 ]
+
+
+# -- GameConfig::IsValidSerial (game_config_serial.cpp, wip/console-r8) -------
+# The serial is a std::string in scratch slot 5 (its buffer in slot 6):
+# mostly 24 digits with the dashes in place (sometimes another character or
+# length, a missing dash, no buffer), sometimes one of the three blacklisted
+# serials (read from S3.EXE; never quoted). The check digits are random, so
+# about one shaped case in a hundred passes both. Dead block 0x411d8c: the
+# inlined compare("") of a null blacklist entry (all three are non-null);
+# 0x411f3c: the inlined operator[]'s "no buffer" branch for character 13
+# (a string without a buffer already failed at the first dash).
+SERIAL_STRING = SCRATCH + 5 * SCRATCH_SLOT_BYTES
+SERIAL_BUFFER = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+_SERIAL_BLACKLIST: list[bytes] = []
+
+
+def serial_blacklist() -> list[bytes]:
+    if not _SERIAL_BLACKLIST:
+        import struct
+
+        import pefile
+        pe = pefile.PE(S3_EXE_PATH, fast_load=True)
+        pointers = struct.unpack("<3I", pe.get_data(0x697108 - 0x400000, 12))
+        for p in pointers:
+            _SERIAL_BLACKLIST.append(pe.get_data(p - 0x400000, 64).split(b"\0")[0])
+    return _SERIAL_BLACKLIST
+
+
+def serial_world(rng, pool, args):
+    roll = rng.random()
+    if roll < 0.08:
+        text = rng.choice(serial_blacklist())
+    else:
+        length = 24 if rng.random() < 0.85 else rng.randrange(30)
+        chars = [rng.choice(b"0123456789") if rng.random() < 0.95 else rng.randint(1, 255) for _ in range(length)]
+        if length == 24:
+            for dash in (4, 9, 14, 19):
+                if rng.random() < 0.97:
+                    chars[dash] = ord("-")
+        text = bytes(chars)
+    fields = [(SERIAL_STRING, rng.getrandbits(8), 1)]
+    if rng.random() < 0.03:
+        fields += [(SERIAL_STRING + 4, 0, 4), (SERIAL_STRING + 8, rng.choice([0, 24]), 4), (SERIAL_STRING + 12, 0, 4)]
+        return fields
+    fields.append((SERIAL_BUFFER, rng.choice([0, 1, 0xff]), 1))
+    for i, c in enumerate(text):
+        fields.append((SERIAL_BUFFER + 1 + i, c, 1))
+    fields.append((SERIAL_BUFFER + 1 + len(text), 0, 1))
+    fields += [(SERIAL_STRING + 4, WORLD_BASE + SERIAL_BUFFER + 1, 4), (SERIAL_STRING + 8, len(text), 4),
+               (SERIAL_STRING + 12, max(len(text), 0x1f), 4)]
+    return fields
+
+
+def serial_atoi_text(machine, ecx, args):
+    """atoi's argument by contents (a stack buffer of each function's own)."""
+    return (machine.guest_read(args[0], 10),)
+
+
+SPECS += [
+    # The CRT's atoi (0x61f39d) is probed (its locale tables aren't set up in
+    # the emulator), its text recorded by contents.
+    Spec("GameConfig_IsValidSerial", 0x00411d10, "thiscall", [lambda rng, pool: WORLD_BASE + SERIAL_STRING],
+         eax_mask=0xff, presets=serial_world, exempt_blocks=(0x00411d8c, 0x00411f3c),
+         callees={0x0061f39d: (1, "cdecl", "probe", None, serial_atoi_text)}),
+]

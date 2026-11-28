@@ -2049,3 +2049,107 @@ SPECS += [
          # the buffer is unshared or frozen).
          exempt_blocks=(0x00418aed, 0x00418b0a, 0x00418b0e)),
 ]
+
+
+# -- GameSettings accessors (game_settings_access.cpp, wip/console-r8) --------
+# The settings object is the world (lazily random). The locked ones take the
+# settings' Win32::CLock (probed, GS_LOCK_CALLEES). RandomMapParams: the map
+# file +0x84 is a scratch pointer and GetChunk / ReleaseChunk are probed
+# (GS_CHUNK_CALLEES: chunk 5 or none); the five out pointers are scratch
+# slots. DeleteMapFile: the map file is none or an object whose vtable is
+# emu.FAKE_VTABLE (slot 0, the deleting destructor, recorded).
+GSA_MAP_FILE = SCRATCH + 0x5000
+
+
+def gsa_map_file(rng, pool, args):
+    if rng.random() < 0.25:
+        return [(0x84, 0, 4)]
+    return [(0x84, WORLD_BASE + GSA_MAP_FILE, 4), (GSA_MAP_FILE, FAKE_VTABLE, 4)]
+
+
+SPECS += [
+    Spec("GameSettings_GetRandomSeed", 0x00437050, "thiscall", [], eax_mask=0xffff, max_cases=200),
+    Spec("GameSettings_IsSavegame", 0x004373c0, "thiscall", [], eax_mask=0xff, max_cases=200),
+    Spec("GameSettings_Option2A", 0x00435aa0, "thiscall", [], eax_mask=0xff, max_cases=200),
+    Spec("GameSettings_ByClan", 0x00435ab0, "thiscall", [], eax_mask=0xff, max_cases=200),
+    Spec("GameSettings_RandomRaceAmazons", 0x00437450, "thiscall", [], eax_mask=0xff, max_cases=200),
+    Spec("GameSettings_GoodsObjective", 0x00437460, "thiscall", [], eax_mask=0xff, max_cases=200),
+    Spec("GameSettings_String18", 0x00431880, "thiscall", [], callees=GS_LOCK_CALLEES, max_cases=200),
+    Spec("GameSettings_LocalPlayerId", 0x00434cb0, "thiscall", [], callees=GS_LOCK_CALLEES, max_cases=200),
+    Spec("GameSettings_TeamCount", 0x00435660, "thiscall", [], callees=GS_LOCK_CALLEES, max_cases=200),
+    # EAX: the lock's leftover (the caller ignores it).
+    Spec("GameSettings_SetValue80", 0x00435a70, "thiscall", [anything], eax_mask=0, callees=GS_LOCK_CALLEES,
+         max_cases=200),
+    Spec("GameSettings_RequestSlotInfos", 0x00437060, "thiscall", [], eax_mask=0, max_cases=200),
+    # EAX: GetChunk's leftovers (the caller ignores it).
+    Spec("GameSettings_RandomMapParams", 0x00436f80, "thiscall",
+         [scratch(0), scratch(1), scratch(2), scratch(3), scratch(4)], eax_mask=0, presets=random_map_settings,
+         callees=GS_CHUNK_CALLEES),
+    Spec("GameSettings_DeleteMapFile", 0x004373d0, "thiscall", [], eax_mask=0, presets=gsa_map_file,
+         virtuals={0: 1}),
+]
+
+
+# -- GameSettings constructor / Reset / destructor (game_settings_lifetime.cpp,
+# wip/console-r8) --------------------------------------------------------------
+# The settings object is the world. Reset: the two strings +0x18 / +0x2c are
+# consistent strings (string_fields; buffers in scratch slots 7 / 8), the
+# map file as for DeleteMapFile, the vector resizes probed; the net-id
+# block is freed with the game's operator delete (recorded). Dead blocks
+# 0x4338a4 / 0x43395f: the inlined string(const char*) constructors' null
+# branches (the texts are constants), with 0x4338c7 / 0x433982 inside them.
+# The destructor's dead blocks 0x40cffe / 0x40d060: the inlined erase(0,
+# npos)'s _Eos after _Grow(0), which is always false. The constructor: the critical
+# section's constructor, the lock, Reset, time and srand probed; the three
+# vector constructors (verified) run. ignore_bytes: the two strings'
+# allocator bytes are an uninitialized byte of the original's frame. The
+# destructor: the two out-of-line vector destructors, CTeam's deleting
+# destructor and the critical section's destructor probed; the team vector
+# has a block of 0..3 teams in scratch slot 9 or none.
+GSLT_STRING18_BUFFER = SCRATCH + 7 * SCRATCH_SLOT_BYTES
+GSLT_NAME_BUFFER = SCRATCH + 8 * SCRATCH_SLOT_BYTES
+GSLT_TEAMS = SCRATCH + 9 * SCRATCH_SLOT_BYTES
+GSLT_RESET_CALLEES = {
+    **GS_LOCK_CALLEES,
+    0x00437d00: (1, "thiscall", "probe"),  # WCValSortedVector<CTeam>::resize
+    0x00437820: (1, "thiscall", "probe"),  # WCValOrderedVector<CPlayer>::resize
+}
+
+
+def gslt_strings(rng):
+    fields, _ = string_fields(rng, 0x18, GSLT_STRING18_BUFFER)
+    other, _ = string_fields(rng, 0x2c, GSLT_NAME_BUFFER)
+    return fields + other
+
+
+def gslt_reset_world(rng, pool, args):
+    return gslt_strings(rng) + gsa_map_file(rng, pool, args) + [
+        (0xa0, rng.choice([0, 1, 5, 0xffffffff, rng.getrandbits(32)]), 4)]
+
+
+def gslt_destroy_world(rng, pool, args):
+    fields = gslt_strings(rng)
+    if rng.random() < 0.2:
+        fields.append((0x44, 0, 4))
+    else:
+        fields += [(0x44, WORLD_BASE + GSLT_TEAMS, 4), (0x4c, rng.choice([0, 1, 2, 3, 0xffffffff]), 4)]
+    return fields
+
+
+SPECS += [
+    Spec("GameSettings_Reset", 0x00433810, "thiscall", [], eax_mask=0, presets=gslt_reset_world,
+         callees=GSLT_RESET_CALLEES, virtuals={0: 1}, exempt_blocks=(0x004338a4, 0x004338c7, 0x0043395f, 0x00433982)),
+    Spec("GameSettings_Construct", 0x00431780, "thiscall", [],
+         callees={**GS_LOCK_CALLEES,
+                  0x0060d650: (0, "thiscall", "this"),   # CCriticalSection::CCriticalSection
+                  0x00433810: (0, "thiscall", "probe"),  # GameSettings::Reset
+                  0x0061f6a7: (1, "cdecl", lambda h: h & 0x7fffffff),  # time
+                  0x0061f7f5: (1, "cdecl", "probe")},    # srand
+         ignore_bytes=(0x18, 0x2c)),
+    Spec("GameSettings_Destruct", 0x0040cf10, "thiscall", [], eax_mask=0, presets=gslt_destroy_world,
+         callees={0x00414590: (0, "thiscall", "probe"),  # ~WCBareVectorBase<int>
+                  0x004146d0: (0, "thiscall", "probe"),  # ~WCBareVectorBase<CPlayer>
+                  0x00414b90: (1, "thiscall", "probe"),  # CTeam's scalar deleting destructor
+                  0x0060d660: (0, "thiscall", "probe")},  # ~CCriticalSection
+         exempt_blocks=(0x0040cffe, 0x0040d060)),
+]

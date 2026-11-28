@@ -848,3 +848,6 @@ address,name,type,status,notes
 0x007336e0,g_pngPassMask,const std::int32_t[7],identified,libpng 1.0.2 png_pass_mask: the pixels a pass fills (png_read_info / png_read_row / png_read_end). Declared in src/s3re/game/tables.h; used by thirdparty/png_read.cpp.
 0x007336fc,g_pngPassDspMask,const std::int32_t[7],identified,"libpng 1.0.2 png_pass_dsp_mask: for the ""rectangle"" display (png_read_info / png_read_row / png_read_end). Declared in src/s3re/game/tables.h; used by thirdparty/png_read.cpp."
 0x0065517c,g_importSetErrorMode,SetErrorModeImport,classified,S3.EXE's import address table slot of SetErrorMode (PaintLib's CTextException constructor 0x5a4230 calls it). Declared in src/s3re/game/globals.h; used by thirdparty/paintlib2.cpp.
+0x00699678,texts::kNetSendSlotInfosRequested,char[],identified,"String ""NET: SendSlotInfos requested"" (GameSettings::RequestSlotInfos). Declared in src/s3re/game/texts.h."
+0x00697108,g_serialBlacklist,const char* const[3],identified,"The three blacklisted serial numbers (pointers to texts) GameConfig::IsValidSerial 0x411d10 rejects; contents not quoted. Declared in src/s3re/game/tables.h; used by framework/game_config_serial.cpp."
+0x006995dc,texts::kSiedler3Evt,char[],identified,"String ""siedler3.evt"" (GameSettings::Reset puts it into the settings string +0x18). Declared in src/s3re/game/texts.h."

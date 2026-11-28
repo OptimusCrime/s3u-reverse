@@ -795,4 +795,8 @@ inline constexpr GameText kSettlerTypeTodoLog{0x6a000c};     // "Art der Figur: 
 inline constexpr GameText kIllegalAnimationLog{0x6a0034};    // "Illegale Animation bei Figur, Anim Nr. %u"
 inline constexpr GameText kSettlerTodoLog{0x6a0060};         // "art %u, owner %u, todo %u, todocount %u"
 inline constexpr GameText kSuspiciousTodoCountLog{0x6a0088}; // "extrem verdächtiger todocount"
+// ------------------------------------------------------------ wip/console-r8 batch
+inline constexpr GameText kNetSendSlotInfosRequested{0x699678};  // "NET: SendSlotInfos requested"
+                                                                 // (GameSettings::RequestSlotInfos 0x437060)
+inline constexpr GameText kSiedler3Evt{0x6995dc};  // "siedler3.evt" (GameSettings::Reset 0x433810, the text +0x18)
 }  // namespace s3re::game::texts

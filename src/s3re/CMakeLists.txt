@@ -279,6 +279,8 @@ add_library(s3re SHARED
     game/ui/game_settings_load_tests.cpp
     game/ui/game_settings_local_player.cpp
     game/ui/game_settings_vectors.cpp
+    game/ui/game_settings_access.cpp
+    game/ui/game_settings_lifetime.cpp
     game/ui/game_teams.cpp
     game/ui/screen_element.cpp
     game/ui/ui_button_scroll.cpp
@@ -357,6 +359,7 @@ add_library(s3re SHARED
     game/framework/framework_small.cpp
     game/framework/game_config.cpp
     game/framework/game_config_fields.cpp
+    game/framework/game_config_serial.cpp
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
     game/framework/wait_times.cpp

@@ -327,6 +327,9 @@ inline constexpr std::uint32_t kCAnyBmp = 0x65c0dc;
 inline constexpr std::uint32_t kCPicDecoder = 0x65c110;
 inline constexpr std::uint32_t kCBmp = 0x65c124;
 inline constexpr std::uint32_t kCDataSource = 0x65c608;
+// wip/console-r8: the game settings' and the configuration's vectors
+inline constexpr std::uint32_t kWCValSortedVector_CTeam = 0x656b80;   // WCValSortedVector<Dirk::CTeam> (settings +0x3c)
+inline constexpr std::uint32_t kWCVectorBase_CPlayer = 0x6559e4;      // WCVectorBase<Dirk::CPlayer> (~GameSettings)
 }  // namespace vtables
 
 // Virtual-base tables (vbptr targets) of the exception classes with a

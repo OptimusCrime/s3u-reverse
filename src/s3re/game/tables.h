@@ -372,6 +372,9 @@ inline constexpr GameGlobal<const std::int32_t> g_serialMultiply{0x65545c};    /
 inline constexpr GameGlobal<const std::int32_t> g_serialPermute{0x655554};     // 12 x 10, indexed (pos % 12) * 10 + char
 inline constexpr GameGlobal<const std::int32_t> g_serialInverse{0x6555ec};     // 10
 inline constexpr GameGlobal<const std::int32_t> g_serialFinal{0x6557f4};       // indexed (pos % 12) * 10 + value
+// The three blacklisted serial numbers GameConfig::IsValidSerial 0x411d10
+// rejects (pointers to texts; their contents are not quoted here).
+inline constexpr GameGlobal<const char* const[3]> g_serialBlacklist{0x697108};
 
 // wip/images-r4 batch: libpng 1.0.2 / zlib 1.1.3 constants (src/s3re/thirdparty/).
 inline constexpr GameGlobal<const std::uint32_t[256]> g_zlibCrcTable{0x65c1c4};  // zlib's crc_table (crc32 0x5aa130)

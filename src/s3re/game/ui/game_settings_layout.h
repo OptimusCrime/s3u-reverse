@@ -112,7 +112,9 @@ static_assert(sizeof(PlayerSetupVector) == 0x18);
 
 struct GameSettings {
     std::uint8_t lock[0x18];     // +0x00 a Win32::CCriticalSection (a CRITICAL_SECTION): PlayerSetup holds it
-    std::uint8_t unk018[0x28 - 0x18];
+    msvc6::String string18;      // +0x18 a std::string handed out by address (GameSettings::String18
+                                 //       0x431880) to CNetThread::OnStart / CNetBounceThread; destroyed by
+                                 //       ~GameSettings 0x40cf10
     std::uint8_t is_savegame;    // +0x28 1: a savegame is being loaded (LoadSaveGame); selects how
                                  //       SetupLocalPlayer 0x433e50 finds the local player
     std::uint8_t multiplayer;    // +0x29 NewGame arg 1 / LoadSaveGame arg 2 (getter IsMultiplayer 0x4318d0;
@@ -130,11 +132,15 @@ struct GameSettings {
                                  //       getter GameSettings::StartGoods 0x412300)
     std::uint32_t local_player_id;  // +0x78 logged by SaveSetup ("CFG: Saving local player id %i"), chunk 0x1a
     std::uint8_t is_host;        // +0x7c GameSettings::IsHost 0x4318a0; LoadSaveGame sets it to 1
-    std::uint8_t unk07d[0x84 - 0x7d];
+    std::uint8_t unk07d[3];
+    std::uint32_t value80;       // +0x80 set by GameSettings::SetValue80 0x435a70 (from CConsoleThread::vf04)
     fileformats::CMapFile* map_file;  // +0x84 the map or savegame being started (a random map: a memory file
                                       //       with chunk 5, re/game_setup.md)
     std::uint16_t seed;          // +0x88 the game's random seed (CGameData::SeedRandom; re/globals.csv)
-    std::uint8_t unk08a[0x90 - 0x8a];
+    std::uint8_t unk08a[2];
+    std::uint8_t slot_infos_requested;  // +0x8c set by GameSettings::RequestSlotInfos 0x437060 ("NET:
+                                        //       SendSlotInfos requested")
+    std::uint8_t unk08d[3];
     watcom::VectorBase net_ids;  // +0x90 a vector of ints (watcom::PtrVector code; length +0xa4): the network
                                  //       id of each player slot (LoadSaveGame fills it from chunk 0x14 +4 and
                                  //       logs "NET: Mapping %i to %i")
@@ -168,6 +174,9 @@ static_assert(offsetof(GameSettings, player_setups) + offsetof(PlayerSetupVector
 static_assert(offsetof(GameSettings, start_goods) == 0x74);
 static_assert(offsetof(GameSettings, local_player_id) == 0x78);
 static_assert(offsetof(GameSettings, map_file) == 0x84);
+static_assert(offsetof(GameSettings, string18) == 0x18);
+static_assert(offsetof(GameSettings, value80) == 0x80);
+static_assert(offsetof(GameSettings, slot_infos_requested) == 0x8c);
 static_assert(offsetof(GameSettings, seed) == 0x88);
 static_assert(offsetof(GameSettings, game_guid) == 0xb0);
 static_assert(offsetof(GameSettings, valueC8) == 0xc8);
