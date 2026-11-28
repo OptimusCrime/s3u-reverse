@@ -28,13 +28,15 @@
 
 namespace s3re::game::ui::kit {
 
-constexpr std::size_t kBytes = 0x3000;
+constexpr std::size_t kBytes = 0x4000;
 constexpr std::size_t kThis = 0x1800;
-constexpr std::size_t kVtable = 0x2e00;    // 64 fake virtual slots
-constexpr std::size_t kVbTables = 0x2f00;  // room for vbtables (8 bytes each)
-constexpr std::size_t kComVtable = 0x2d00;  // 64 fake COM slots (stdcall, interface + 1 argument)
+constexpr std::size_t kVtable = 0x3c00;    // 64 fake virtual slots
+constexpr std::size_t kComVtable = 0x3d00;  // 64 fake COM slots (stdcall, interface + 1 argument)
+constexpr std::size_t kVtable3 = 0x3e00;   // 64 fake virtual slots with 3 arguments each
+constexpr std::size_t kVbTables = 0x3f00;  // room for vbtables (8 bytes each)
 constexpr std::uint32_t kVirtualId = 0xf0000000u;  // callee id of slot s: kVirtualId + 4 * s
 constexpr std::uint32_t kComId = 0xe0000000u;      // callee id of COM slot s: kComId + 4 * s
+constexpr std::uint32_t kVirtual3Id = 0xd0000000u;  // callee id of 3-argument slot s: kVirtual3Id + 4 * s
 constexpr std::uint32_t kStackTag = 0x57ac0000u;
 
 struct Call {
@@ -194,11 +196,21 @@ void FillComVtable(std::uint32_t* table, std::index_sequence<S...>) {
     ((table[S] = reinterpret_cast<std::uint32_t>(&StdStub<kComId + 4 * S, 0, 1>)), ...);
 }
 
-// Writes the fake vtables (64 recording slots each) at kVtable and kComVtable.
+template <std::size_t... S>
+void FillVtable3(std::uint32_t* table, std::index_sequence<S...>) {
+    ((table[S] = reinterpret_cast<std::uint32_t>(&ThisStub<kVirtual3Id + 4 * S, 0, 1, 2>)), ...);
+}
+
+// Writes the fake vtables (64 recording slots each) at kVtable, kComVtable
+// and kVtable3.
 inline void FakeVtable(std::uint8_t* buffer) {
     FillVtable(reinterpret_cast<std::uint32_t*>(buffer + kVtable), std::make_index_sequence<64>{});
     FillComVtable(reinterpret_cast<std::uint32_t*>(buffer + kComVtable), std::make_index_sequence<64>{});
+    FillVtable3(reinterpret_cast<std::uint32_t*>(buffer + kVtable3), std::make_index_sequence<64>{});
 }
+
+// An object at `offset` whose virtual functions all take 3 arguments.
+inline void FakeObject3(std::uint8_t* buffer, std::size_t offset);
 
 // Writes a pointer to `target` (an offset in the buffer) at `offset`.
 inline void Link(std::uint8_t* buffer, std::size_t offset, std::size_t target) {
@@ -212,6 +224,7 @@ inline void Put(std::uint8_t* buffer, std::size_t offset, std::uint32_t value) {
 
 // An object at `offset` whose vtable is the fake one.
 inline void FakeObject(std::uint8_t* buffer, std::size_t offset) { Link(buffer, offset, kVtable); }
+inline void FakeObject3(std::uint8_t* buffer, std::size_t offset) { Link(buffer, offset, kVtable3); }
 
 // A COM interface at `offset` (its methods: interface + 1 argument, recorded).
 inline void FakeComObject(std::uint8_t* buffer, std::size_t offset) { Link(buffer, offset, kComVtable); }

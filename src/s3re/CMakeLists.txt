@@ -290,6 +290,8 @@ add_library(s3re SHARED
     game/ui/ui_text_getters.cpp
     game/ui/ui_updown.cpp
     game/ui/ui_dialog_setters.cpp
+    game/ui/ui_list_selection.cpp
+    game/ui/ui_screen_queue.cpp
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
     game/graphics/building_slots.cpp

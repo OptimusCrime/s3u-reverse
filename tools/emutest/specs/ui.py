@@ -2197,3 +2197,73 @@ SPECS += [
     dlg_spec("CScreenElement_PostMessage", 0x004160f0, [anything] * 5,
              presets=dlg_presets(dlg_vb(4, at=DLG_OTHER), dlg_field_choice(0x18, *DLG_PARENT))),
 ]
+
+
+# -- wip/dialog-r8 batch 2: list selection and cell getters
+# (ui_list_selection.cpp), the screen queue and PopModal (ui_screen_queue.cpp).
+# Same objects as batch 1. The selection fields small, -1 or near the top
+# line, sometimes huge (the end of the visible range wraps). The vector's
+# find (slot 3) writes the index through its third argument (a stack local,
+# recorded by its contents). The queue links (from get(0), DLG_LINKS) hold
+# 0 or one of two elements with the fake vtable (their low bytes 0 and 1,
+# for the bool list).
+DLG_LIST_CALLEES = dict(DLG_CALLEES)
+DLG_LIST_CALLEES.update({0x61f9f0: (5, "cdecl", "probe"), 0x426f60: (1, "thiscall", "probe"),
+                         0x425110: (1, "thiscall", "probe"), 0x420d60: (1, "thiscall", "probe"),
+                         0x417f50: (0, "thiscall", "probe"),
+                         0x60b500: (1, "thiscall", dlg_pointer_or_null), 0x415850: (5, "thiscall", "probe")})
+DLG_SELECT_CALLEES = dict(DLG_LIST_CALLEES)
+DLG_SELECT_CALLEES[0x41f3b0] = (2, "thiscall", "probe")  # CListBox::SetSelection (not for its own spec)
+DLG_QUEUE_CALLEES = dict(DLG_LIST_CALLEES)
+DLG_QUEUE_CALLEES[0x60b500] = (1, "thiscall", dlg_pointer)
+DLG_FOCUS = [0, WORLD_BASE + DLG_OTHER, WORLD_BASE + DLG_OTHER + 0x101]
+
+
+def dlg_selection(selection, top, visible):
+    def part(rng):
+        t = rng.getrandbits(32) if rng.random() < 0.1 else rng.randint(-3, 8)
+        v = rng.getrandbits(32) if rng.random() < 0.1 else rng.randint(-2, 5)
+        s = -1 if rng.random() < 0.15 else rng.getrandbits(32) if rng.random() < 0.1 else t + rng.randint(-4, 8)
+        return [(DLG_THIS + top, t & 0xFFFFFFFF, 4), (DLG_THIS + visible, v & 0xFFFFFFFF, 4),
+                (DLG_THIS + selection, s & 0xFFFFFFFF, 4)]
+    return part
+
+
+def dlg_find_index(machine, ecx, args, h):
+    machine.guest_write(args[2], ((h >> 16) % 5).to_bytes(4, "little"))
+
+
+def dlg_flag_byte(rng, pool):
+    return rng.choice([0, 1, 0x100, rng.getrandbits(32)])
+
+
+def dlg_focus_links(rng):
+    return [(DLG_LINKS + 4 * k, rng.choice(DLG_FOCUS), 4) for k in range(10)] + \
+           [(DLG_OTHER, FAKE_VTABLE, 4), (DLG_OTHER + 0x101, FAKE_VTABLE, 4)]
+
+
+SPECS += [
+    *[dlg_spec(name, address, [dlg_small_or_any, dlg_small_or_any], callees=DLG_LIST_CALLEES)
+      for name, address in (("CListView_GetCellEdit", 0x00424eb0), ("CListView_GetCellStaticText", 0x00424f10),
+                            ("CListView_GetCellImageButton", 0x00424f70), ("CListView_GetCellStaticFrame", 0x00424fd0),
+                            ("CListView_GetCellUpDown", 0x00425030))],
+    dlg_spec("CListView_SelectLine", 0x00425090, [dlg_small_or_any, dlg_flag_byte], callees=DLG_LIST_CALLEES,
+             presets=dlg_presets(dlg_vb(4), dlg_selection(0x194, 0x190, 0x188))),
+    # The list box takes the selection from its argument (stored first).
+    dlg_spec("CListBox_SetSelection", 0x0041f3b0,
+             [lambda rng, pool: rng.choice([0xFFFFFFFF, rng.getrandbits(32)] + list(range(-4, 10))) & 0xFFFFFFFF,
+              dlg_flag_byte], callees=DLG_LIST_CALLEES,
+             presets=dlg_presets(dlg_vb(4), lambda rng: [(DLG_THIS + 0x410, rng.choice([0, 1, 3, 0x7FFFFFFF]), 4),
+                                                         (DLG_THIS + 0x414, rng.choice([0, 1, 2, 3, 5, 0x7FFFFFFF]), 4)])),
+    dlg_spec("CListBox_SelectString", 0x0041f4f0, [anything, dlg_flag_byte], callees=DLG_SELECT_CALLEES,
+             virtuals={0x0c: (3, {2: 4})}, virtual_effects={0x0c: dlg_find_index},
+             presets=dlg_presets([(DLG_THIS + 0x420, FAKE_VTABLE, 4)], dlg_field_choice(0x434, 0, 0, 1, 3))),
+    # 0x417e12: HasQueuedMessages was true but the queue had no link: an
+    # uninitialized message would be dispatched (can't happen).
+    dlg_spec("CScreen_ProcessQueuedMessage", 0x00417df0, [], callees=DLG_QUEUE_CALLEES, exempt_blocks=(0x00417e12,),
+             virtuals={0x04: 1}, presets=dlg_presets(dlg_vb(4), [(DLG_THIS + 0x7c, FAKE_VTABLE, 4)])),
+    dlg_spec("CScreen_OnMessage", 0x00417e70, [anything] * 5, callees=DLG_LIST_CALLEES, virtuals={0x04: 1},
+             presets=dlg_presets(dlg_vb(-0x94), [(DLG_THIS - 0x1c, FAKE_VTABLE, 4)])),
+    dlg_spec("CScreenGroup_PopModal", 0x00417a30, [anything], callees=DLG_LIST_CALLEES, virtuals={0x04: 1, 0x0c: 1},
+             presets=dlg_presets([(DLG_THIS + o, FAKE_VTABLE, 4) for o in (0, 0x34, 0x4c, 0x64)], dlg_focus_links)),
+]

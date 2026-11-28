@@ -384,6 +384,14 @@ inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x69f908;  // ".PAVCFile
 inline constexpr std::uintptr_t kCDirectSoundExceptionPointer = 0x697510;
 // wip/ui-gdi batch: ".?AVCDropdown@@" (CListBox::FillBackground 0x420340 asks typeid(*parent) == it)
 inline constexpr std::uintptr_t kCDropdown = 0x6985a8;
+// wip/dialog-r8 batch: dynamic_cast operands of the CListView cell getters and CScreenGroup::PushModal.
+inline constexpr std::uintptr_t kCScreenElement = 0x6976a0;  // ".?AVCScreenElement@@"
+inline constexpr std::uintptr_t kCEditControl = 0x697ce0;    // ".?AVCEditControl@@"
+inline constexpr std::uintptr_t kCStaticText = 0x697fa8;     // ".?AVCStaticText@@"
+inline constexpr std::uintptr_t kCImageButton = 0x697e60;    // ".?AVCImageButton@@"
+inline constexpr std::uintptr_t kCStaticFrame = 0x698230;    // ".?AVCStaticFrame@@"
+inline constexpr std::uintptr_t kCUpDown = 0x698750;         // ".?AVCUpDown@@"
+inline constexpr std::uintptr_t kCScreenGroup = 0x697960;    // ".?AVCScreenGroup@@"
 }  // namespace type_descriptor
 
 }  // namespace s3re::game
