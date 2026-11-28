@@ -392,6 +392,8 @@ inline constexpr std::uintptr_t kCImageButton = 0x697e60;    // ".?AVCImageButto
 inline constexpr std::uintptr_t kCStaticFrame = 0x698230;    // ".?AVCStaticFrame@@"
 inline constexpr std::uintptr_t kCUpDown = 0x698750;         // ".?AVCUpDown@@"
 inline constexpr std::uintptr_t kCScreenGroup = 0x697960;    // ".?AVCScreenGroup@@"
+inline constexpr std::uintptr_t kCControl = 0x697cb8;        // ".?AVCControl@@"
+inline constexpr std::uintptr_t kCProgressBar = 0x6987f0;    // ".?AVCProgressBar@@"
 }  // namespace type_descriptor
 
 }  // namespace s3re::game

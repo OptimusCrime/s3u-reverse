@@ -2267,3 +2267,58 @@ SPECS += [
     dlg_spec("CScreenGroup_PopModal", 0x00417a30, [anything], callees=DLG_LIST_CALLEES, virtuals={0x04: 1, 0x0c: 1},
              presets=dlg_presets([(DLG_THIS + o, FAKE_VTABLE, 4) for o in (0, 0x34, 0x4c, 0x64)], dlg_focus_links)),
 ]
+
+
+# -- wip/dialog-r8 batch 3: CListView cell setters by column and the scroll
+# bar layout (ui_list_view_cells.cpp). The column vector at this + 0xc8
+# (fake vtable; its data in scratch, column types 5..8; capacity and length
+# small, often 0); the line count small. UpdateScrollBar: the element and
+# the bar's element through vbptrs +4 / +0x19c (one vbtable, displacement
+# 0x100); the counts and the top line small or huge. SetRect's rect is a
+# stack local: recorded by its contents.
+DLG_COLUMNS = SCRATCH + 7 * SCRATCH_SLOT_BYTES
+DLG_CELL_CALLEES = dict(DLG_LIST_CALLEES)
+DLG_CELL_CALLEES.update({0x422bf0: (2, "thiscall", "probe"), 0x422b90: (1, "thiscall", "probe"),
+                         0x423160: (2, "thiscall", "probe"), 0x4276a0: (1, "thiscall", "probe"),
+                         0x418330: (1, "thiscall", "probe"), 0x41e380: (3, "thiscall", "probe"),
+                         0x4156e0: (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),)),
+                         0x417090: (2, "thiscall", "probe")})
+DLG_SCROLL_CALLEES = dict(DLG_CELL_CALLEES)
+del DLG_SCROLL_CALLEES[0x425b50]  # UpdateScrollBar itself
+# Dead: the inlined operator[] clamps the length to 1 after growing an
+# empty vector (its length is 0 there, and the bare resize leaves it).
+DLG_CLAMP_DEAD = {0x00424c70: (0x00424cc2,), 0x00424d70: (0x00424dc2,), 0x00423fe0: (0x00424037,)}
+
+
+def dlg_columns(rng):
+    out = [(DLG_THIS + 0xc8, FAKE_VTABLE, 4), (DLG_THIS + 0xc8 + 8, WORLD_BASE + DLG_COLUMNS, 4),
+           (DLG_THIS + 0xc8 + 0xc, rng.choice([0, 0, 1, 3, 8]), 4),
+           (DLG_THIS + 0xc8 + 0x14, rng.choice([0, 0, 1, 2, 5, 8]), 4),
+           (DLG_THIS + 0xf8, rng.randrange(5), 4)]
+    out += [(DLG_COLUMNS + 0x20 * k + 4, rng.randint(5, 8), 4) for k in range(8)]
+    return out
+
+
+def dlg_column_index(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.1 else rng.randint(-2, 9) & 0xFFFFFFFF
+
+
+def dlg_scroll_counts(rng):
+    def count():
+        return rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(12)
+    top = rng.getrandbits(32) if rng.random() < 0.1 else rng.randint(-2, 3) & 0xFFFFFFFF
+    return [(DLG_THIS + 0xf8, count(), 4), (DLG_THIS + 0x18c, count(), 4), (DLG_THIS + 0x190, top, 4),
+            (DLG_THIS + 0x4f2, rng.randrange(3), 1)]
+
+
+SPECS += [
+    dlg_spec("CListView_SetCellUpDown", 0x00424c70, exempt_blocks=DLG_CLAMP_DEAD[0x00424c70], args=[dlg_small_or_any, dlg_column_index, anything, anything, anything],
+             callees=DLG_CELL_CALLEES, virtuals={0x04: 1}, eax_mask=0, presets=dlg_presets(dlg_columns)),
+    dlg_spec("CListView_SetCellProgress", 0x00424d70, exempt_blocks=DLG_CLAMP_DEAD[0x00424d70], args=[dlg_small_or_any, dlg_column_index, anything, anything],
+             callees=DLG_CELL_CALLEES, virtuals={0x04: 1}, eax_mask=0, presets=dlg_presets(dlg_columns)),
+    dlg_spec("CListView_SetColumnTooltip", 0x00423fe0, exempt_blocks=DLG_CLAMP_DEAD[0x00423fe0], args=[dlg_column_index, anything],
+             callees=DLG_CELL_CALLEES, virtuals={0x04: 1}, eax_mask=0, presets=dlg_presets(dlg_columns)),
+    # 0x425c72: the scroll bar's address (this + 0x198) tested for null: dead.
+    dlg_spec("CListView_UpdateScrollBar", 0x00425b50, [], callees=DLG_SCROLL_CALLEES, exempt_blocks=(0x00425c72,),
+             presets=dlg_presets(dlg_vb(4), [(DLG_THIS + 0x19c, WORLD_BASE + MEMBER_VBTABLE, 4)], dlg_scroll_counts)),
+]
