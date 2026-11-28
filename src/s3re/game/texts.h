@@ -799,6 +799,7 @@ inline constexpr GameText kSuspiciousTodoCountLog{0x6a0088}; // "extrem verdäch
 
 // wip/events-r8 batch: CLogicThread::ProcessEvents (logic/events/).
 // --- events-r8 frame ---
+inline constexpr GameText kSendingGodlyEvent{0x72ff8c};          // "xxx Sending NetMessage GodlyEvent #%u"
 inline constexpr GameGlobal<const wchar_t[3]> kChatPromptSuffix{0x7300f4};   // L": " after the player name in the chat input
 inline constexpr GameText kCampaignAmazonsVsOthers{0x7300c4};      // "Activating campaign Amazon vs Others %u (%u)"
 inline constexpr GameText kCampaignAmazonsVsOthersLog{0x73008c};   // "xxx Campaign manually enabled: Amazon vs Others %u (%u)"

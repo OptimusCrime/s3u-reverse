@@ -61,6 +61,8 @@ PE_CALLEES = {
     0x0051b560: (2, "thiscall", "probe"),   # CGameData::CenterCameraOnTile (verified)
     0x0051b4d0: (0, "thiscall", "probe"),   # CGameData::ClampCamera (verified)
     0x00542630: (0, "thiscall", "probe"),   # CLogicThread::ClearSelection (verified)
+    0x004d99e0: (5, "thiscall", lambda h: 0 if h % 3 == 0 else 1 + h % 9),  # CGameData::CheckBuildingSite (verified; slow)
+    0x00510470: (1, "thiscall", lambda h: h % 3),  # CGameData::SettlerStartHealth (verified): equal to the health byte often
 }
 
 # Per focus: more world/thread fields; filled by each part below.
@@ -79,6 +81,9 @@ def pe_event(type_: int, rng) -> list:
                               0x56, 0x57, 0x58, 0x59, 0x5a, 0x6b, 0x6d, 0x70, 0x71, 0x72, 0x74, 0x75, 0x76, 0x77,
                               0x7b, rng.getrandbits(8)])
         data[1] = rng.choice([0, 0, 1, 2, 4, rng.getrandbits(8)])
+        import os as _os
+        if _os.environ.get("PE_MENUS") and data[4] in b"QWERASDFYZXCVGP 123456789":
+            data[4] = 0x75  # development: no key that opens another menu
     elif type_ == 0x20:
         data[2] = rng.choice([1, 1, 0])
     elif type_ in (0x16, 0x17):
@@ -139,7 +144,7 @@ def _pe_debug(focus, menu, mouse, idle, events, dwords) -> None:
         return
     _pe_case["n"] = _pe_case.get("n", -1) + 1
     print(f"  pe case {_pe_case['n']}: focus {focus} menu {menu} mouse {mouse} idle {idle} events "
-          + " ".join(f"{t:#x}" for t in events) + " dwords " + " ".join(f"{d:08x}" for d in dwords))
+          + " ".join(f"{t[0] & 0xff:#x}" if isinstance(t, list) else f"{t:#x}" for t in events) + " dwords " + " ".join(f"{d:08x}" for d in dwords))
 
 
 def pe_presets_for(focus: str):
@@ -150,9 +155,16 @@ def pe_presets_for(focus: str):
         if focus == "general":
             where = rng.choice(["panel", "panel", "minimap", "map", "edge"])
             menu = rng.choice([0, 1, 2, 3, 4, 5, 6, 7, 8, 11, rng.randrange(14)])
+            import os as _os
+            if _os.environ.get("PE_MENUS"):  # development only: the menus to draw from
+                menu = rng.choice([int(m) for m in _os.environ["PE_MENUS"].split(",")])
             count = rng.randrange(5)
             types = [t for t, w in PE_EVENT_TYPES for _ in range(w)]
             events = [rng.choice(types) for _ in range(count)]
+        elif focus in ("keys", "map"):
+            menu = rng.choice([0, 1, 4, 5])
+            where = "map" if focus == "map" else rng.choice(["map", "minimap"])
+            events = pe_keys_events(rng) if focus == "keys" else pe_map_focus_events(rng)
         else:
             menu = int(focus[4:])
             where = "panel" if rng.random() < 0.9 else rng.choice(["minimap", "map"])
@@ -161,9 +173,12 @@ def pe_presets_for(focus: str):
                 events.append(rng.choice([0x10, 0x11]))
         x, y = pe_mouse(rng, layout, where)
         idle = rng.choice([0, 3, 9, 9, 10, 11, rng.getrandbits(32)]) if not events else rng.choice([0, 9, 10, 20])
+        import os as _os
+        if (_os.environ.get("PE_MENUS") or focus in ("map", "keys")) and events and idle == 9:  # no hover after other events
+            idle = 0
         dwords = []
         for t in events:
-            dwords += pe_event(t, rng)
+            dwords += t if isinstance(t, list) else pe_event(t, rng)
         t = LOGIC_THREAD
         fields += [(t + PE_MOUSE_X, x, 4), (t + PE_MOUSE_Y, y, 4), (t + PE_IDLE, idle, 4),
                    (t + PE_PAUSED, 0 if rng.random() < 0.9 else 1, 4),
@@ -217,6 +232,174 @@ def pe_globals_for(focus: str):
 # (end of the part)
 #
 # --- frame, keys, map ---
+# Focus "keys": several key presses (the switch's keys, the cheat keys,
+# Enter with the chat input); focus "map": clicks on the map, the drag
+# selection and the right click with groups, hit areas, buildings,
+# settlers and tiles set up.
+PE_MAP_SETTLERS = 60
+PE_MAP_BUILDINGS = 12
+PE_PLAYERS = 0x11943dc
+PE_PLAYER_BYTES = 0x148
+
+
+def pe_with_byte(e: list, changes: dict) -> list:
+    data = bytearray(b"".join(d.to_bytes(4, "little") for d in e))
+    for k, v in changes.items():
+        data[k] = v
+    return [int.from_bytes(bytes(data[i:i + 4]), "little") for i in range(0, 20, 4)]
+
+
+def pe_keys_events(rng) -> list:
+    keys = [9, 13, 0x20, 0x24, 0x25, 0x26, 0x27, 0x28, *range(0x31, 0x3a), 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
+            0x49, 0x4a, 0x4b, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x6b, 0x6d,
+            0x70, 0x71, 0x72, 0x74, 0x75, 0x76, 0x77, 0x77, 0x77, 0x7b]
+    return [pe_with_byte(pe_event(0x01, rng), {4: rng.choice(keys), 1: rng.choice([0, 1, 2, 4, 6])})
+            for _ in range(1 + rng.randrange(4))]
+
+
+def pe_players(rng, fields) -> None:
+    for p in range(20):
+        base = PE_PLAYERS + p * PE_PLAYER_BYTES
+        fields += [(base + 0x00, rng.choice([0, 1, 1]), 4), (base + 0x04, rng.randrange(4), 4),
+                   (base + 0x0c, rng.randrange(3), 4), (base + 0x1c, rng.randrange(40), 4),
+                   (base + 0x88, rng.randrange(2), 4), (base + 0x8c, rng.randrange(80), 4)]
+        fields += [(base + 0x94 + 4 * k, rng.randrange(40), 4) for k in range(8)]
+
+
+def pe_settlers(rng, fields, local: int) -> None:
+    for n in range(1, PE_MAP_SETTLERS + 1):
+        s = SETTLERS + n * SETTLER_BYTES
+        fields += [(s + 0, local if rng.random() < 0.8 else rng.randrange(4), 1),
+                   (s + 1, rng.choice([0x24, 0x24, 0x17, 1, 2, 5, 10, 11, 20, 21, 30, rng.randrange(0x30)]), 1),
+                   (s + 3, rng.randrange(3), 1), (s + 4, rng.randrange(20, 100), 2), (s + 6, rng.randrange(20, 100), 2)]
+
+
+def pe_buildings(rng, fields, local: int) -> None:
+    for n in range(PE_MAP_BUILDINGS + 1):
+        b = BUILDINGS + n * BUILDING_BYTES
+        fields += [(b + 0x00, local if rng.random() < 0.8 else rng.randrange(4), 1),
+                   (b + 0x02, rng.randrange(20, 100), 2), (b + 0x04, rng.randrange(20, 100), 2),
+                   (b + 0x06, rng.choice([1, 2, 3, 5, 0x0e, 0x18, 0x19, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x24, 0x2f,
+                                          0x30, 0x32, 0x33, 0x34, rng.randrange(60)]), 1),
+                   (b + 0x0a, rng.randrange(20, 100), 2), (b + 0x0c, rng.randrange(20, 100), 2),
+                   (b + 0x21, 0 if rng.random() < 0.8 else 1, 1)]
+
+
+def pe_map_tiles(rng, fields, local: int) -> None:
+    # Areas 0/1, owners and settlers on tiles of the play area 20..100; the
+    # MapOffset table with growing distances.
+    for _ in range(300):
+        x, y = rng.randrange(20, 100), rng.randrange(20, 100)
+        t = tile(x, y)
+        fields += [(t + 0x14, rng.randrange(2), 2), (t + 0x08, rng.choice([local, 0xff, rng.randrange(4)]), 1),
+                   (t + 0x00, rng.randrange(PE_MAP_SETTLERS + 1) if rng.random() < 0.5 else 0, 2)]
+    for k in range(64):
+        o = NEIGHBOUR_OFFSETS + 16 * k
+        distance = (k // 8 if rng.random() < 0.9 else 7) if k else rng.choice([0, 0, 0, 6])
+        fields += [(o, rng.randrange(-3, 4) & 0xFFFFFFFF, 4), (o + 4, rng.randrange(-3, 4) & 0xFFFFFFFF, 4),
+                   (o + 8, distance, 4)]
+
+
+def pe_map_presets(rng, fields) -> None:
+    local = rng.randrange(4)
+    fields += [(LOCAL_PLAYER, local, 4), (MAP_SIZE, 128, 4)]
+    pe_players(rng, fields)
+    pe_settlers(rng, fields, local)
+    pe_buildings(rng, fields, local)
+    pe_map_tiles(rng, fields, local)
+    menu = rng.choice([0, 1, 1, 4, 4, 4, 5, 5, 2])
+    fields += [(0x2d284, menu, 4), (0x2d288, rng.randrange(2), 4), (0x2d28c, rng.randrange(2), 4),
+               (0x2d298, rng.choice([0, 1, 2, 2, 6, 9, 13, 14, 16, 17, 3]), 4), (0x2d29c, rng.randrange(4), 4),
+               (0x2d2f0, rng.randrange(60), 4), (0x2d2e4, rng.randrange(20, 100), 4),
+               (0x2d2e8, rng.randrange(20, 100), 4), (0x2d2d8, rng.randrange(100), 4)]
+
+
+def pe_map_globals(rng) -> list:
+    # The drag: a click (start and end within a few pixels) or a box.
+    start_x, start_y = rng.randrange(1024), rng.choice([rng.randrange(768), rng.randrange(8)])
+    if rng.random() < 0.5:
+        end_x, end_y = start_x + rng.randrange(-4, 5), start_y + rng.randrange(-4, 5)
+    else:
+        end_x, end_y = rng.randrange(1024), rng.randrange(768)
+    fields = [(0x007DFD34, 1 if rng.random() < 0.7 else 0, 4), (0x007DFB9C, start_x & 0xFFFFFFFF, 4),
+              (0x007DFB98, start_y & 0xFFFFFFFF, 4), (0x007DFD38, end_x & 0xFFFFFFFF, 4),
+              (0x007DFD3C, end_y & 0xFFFFFFFF, 4), (0x007DFD70, rng.randrange(100), 4),
+              (0x007DFD6C, rng.randrange(PE_MAP_BUILDINGS + 1), 4), (0x00730F54, rng.randrange(2), 4),
+              (0x007DFD68, rng.choice([-1, 0, 1, 2, 9]) & 0xFFFFFFFF, 4)]
+    # The settler groups: counts and lists (settler numbers 1..PE_MAP_SETTLERS).
+    for g in range(10):
+        count = rng.choice([0, 1, 1, 2, 5, 6, 21, 100, rng.randrange(8)])
+        fields.append((0x007AD620 + 2 * g, count, 2))
+        fields += [(0x007AD634 + 200 * g + 2 * i, rng.randrange(1, PE_MAP_SETTLERS + 1), 2)
+                   for i in range(min(count, 24))]
+        fields.append((0x007AD5F8 + 4 * g, rng.randrange(2), 4))
+    fields.append((0x007AD61E, rng.randrange(3), 2))  # counts[-1] (group -1)
+    # The hit areas (read half 0 or 1): kinds of settlers, 100 = a building.
+    half = rng.randrange(2)
+    count = rng.choice([0, 1, 3, 8, 20])
+    fields += [(0x007DFD64, half, 4), (0x007DFD5C, count, 4)]
+    for k in range(count):
+        a = 0x007ADE08 + 10 * (half + 2 * k)
+        kind = rng.choice([1, 5, 9, 0x0a, 0x0b, 0x14, 0x15, 0x1d, 0x28, 0x32, 0x33, 100, 100, rng.randrange(0x40)])
+        number = rng.randrange(1, PE_MAP_BUILDINGS + 1) if kind == 100 else rng.randrange(1, PE_MAP_SETTLERS + 1)
+        near = rng.random() < 0.7  # most hit areas near the drag start, so the box finds them
+        x = start_x + rng.randrange(-12, 13) if near else rng.randrange(1024)
+        y = start_y + rng.randrange(-6, 34) if near else rng.randrange(768)
+        fields += [(a, kind, 2), (a + 2, x & 0xFFFF, 2), (a + 4, y & 0xFFFF, 2), (a + 6, number, 2)]
+    # A priest alone in the group sometimes (the spell).
+    if rng.random() < 0.3:
+        fields += [(0x007AD620 + 2 * g, 1, 2) for g in range(10)]
+    return fields
+
+
+def pe_map_focus_events(rng) -> list:
+    out = []
+    for _ in range(1 + rng.randrange(3)):
+        t = rng.choice([0x10, 0x10, 0x12, 0x12, 0x13, 0x15, 0x15, 0x16])
+        e = pe_event(t, rng)
+        if t == 0x15 and rng.random() < 0.8:
+            e = pe_with_byte(e, {1: rng.choice([0, 1, 2, 4])})
+        if t == 0x12 and rng.random() < 0.8:
+            e = pe_with_byte(e, {1: rng.choice([0, 1, 2, 4, 6])})
+        if t == 0x16:  # stay on the map (the panel menus are other parts' foci)
+            x, y = 220 + rng.randrange(800), rng.randrange(768)
+            e = pe_with_byte(e, {8: x & 0xFF, 9: x >> 8, 10: y & 0xFF, 11: y >> 8})
+        out.append(e)
+    return out
+
+
+# The map name for the campaign cheat (F8): GameSettings +0x2c (an MSVC 6
+# string, copied by GameSettings::MapName) points at a text in the scratch
+# area of the world: "Single" + a letter + two digits, or something else.
+PE_MAP_NAME = LOGIC_THREAD + 0x5000
+
+
+def pe_map_name_text(rng) -> bytes:
+    if rng.random() < 0.2:
+        return bytes(rng.choice(b"SingleXZ0123") for _ in range(rng.randrange(16)))
+    letter = rng.choice(b"jerZGx")
+    digits = bytes([rng.choice(b"0011123456789"), rng.choice(b"0123456789/:")])
+    return b"Single_" + bytes([letter]) + digits + b"_map" + bytes(rng.randrange(3))
+
+
+def pe_keys_presets(rng, fields) -> None:
+    pe_map_presets(rng, fields)
+    text = pe_map_name_text(rng)
+    _pe_case["map_name"] = len(text)
+    fields += [(PE_MAP_NAME, 0, 1)] + [(PE_MAP_NAME + 1 + i, c, 1) for i, c in enumerate(text + bytes(1))]
+
+
+def pe_keys_globals(rng) -> list:
+    length = _pe_case.get("map_name", 0)
+    return pe_map_globals(rng) + [(0x007DFDA8, 9 if rng.random() < 0.4 else 0, 4),  # g_cheatMode
+                                  (0x007A7A18 + 0x2c + 4, WORLD_BASE + PE_MAP_NAME + 1, 4),
+                                  (0x007A7A18 + 0x2c + 8, length, 4), (0x007A7A18 + 0x2c + 12, length | 31, 4)]
+
+
+PE_MENU_PRESETS["map"] = pe_map_presets
+PE_MENU_GLOBALS["map"] = pe_map_globals
+PE_MENU_PRESETS["keys"] = pe_keys_presets
+PE_MENU_GLOBALS["keys"] = pe_keys_globals
 # (end of the part)
 #
 
@@ -224,7 +407,7 @@ def pe_globals_for(focus: str):
 # work on one part, the environment variable PE_FOCUS (e.g. "menu4") makes
 # every case use that focus (development only; recorded passes need the
 # default mixture).
-PE_FOCI = ["menu1", "menu2", "menu3", "menu4", "menu5", "menu6", "menu7", "menu8"]
+PE_FOCI = ["menu1", "menu2", "menu3", "menu4", "menu5", "menu6", "menu7", "menu8", "keys", "map", "map"]
 
 
 def pe_focus(rng) -> str:

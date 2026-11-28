@@ -113,6 +113,12 @@ struct FrameLocals {
     std::uint8_t chat_message[0x400];
     // The sprintf buffer of the texts ([F+0x720]).
     char text[0x400];
+    // The work-area search of MapClick ([F+0x16c], [F+0x168]): the last
+    // candidate tile; reused when the search doesn't run (events_map.cpp).
+    std::uint32_t work_area_x;
+    std::uint32_t work_area_y;
+    // The owner of the attacked tile (RightUp, [F+0x164], a byte).
+    std::uint8_t target_owner;
     // [F+0x158]: written by the players menu (menu 6, events_players.cpp)
     // and read by key 0x74 (F5) of a later event (events_keys.cpp). Also the
     // data pointer of a string of the cheat input ([F+0x154], 0 after it).
