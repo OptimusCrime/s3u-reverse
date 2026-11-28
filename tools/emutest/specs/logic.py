@@ -2804,3 +2804,33 @@ SPECS += [
          # 0x51e3d0/0x51e3d4 can't either.
          exempt_blocks=(0x0051e3a9, 0x0051e3d0, 0x0051e3d4)),
 ]
+
+
+# CLogicThread_UpdateTutorial (tutorial.cpp, wip/logic-r8): the step one of
+# the goals' (or 0 or another value); every goal helper of the world and
+# AdvanceTutorialStep probed, the helpers returning small counts or flags
+# (sometimes large values); player 0's strength around the goal (170).
+TUTORIAL_GOAL_STEPS = [0, 1, 2, 3, 10, 20, 22, 30, 40, 50, 55, 60, 70, 80, 90, 95, 100, 110, 115, 120, 130, 135,
+                       140, 150, 155, 160, 170, 180, 190, 200, 210, 220, 225, 230, 240, 250, 320, 330, 340, 350,
+                       355, 360, 370, 380, 390, 400, 500, 505, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600,
+                       5, 21, 601]
+
+
+def tutorial_goal_state(rng, pool, args):
+    return [(0x2d308, rng.choice(TUTORIAL_GOAL_STEPS), 4),
+            (PLAYER_RECORDS + 0x80, rng.choice([169, 170, 171, 0, rng.getrandbits(32)]), 4)]
+
+
+def tutorial_goal_value(h):
+    return [0, 1, 2, 3, 4, 5, 29, 30, 31, h & 0xffffffff][h % 10]
+
+
+TUTORIAL_GOAL_CALLEES = {address: (count, "thiscall", tutorial_goal_value) for address, count in (
+    (0x005157b0, 1), (0x005157d0, 1), (0x005157f0, 1), (0x00515810, 1), (0x00515830, 0), (0x00515850, 2),
+    (0x005158a0, 2), (0x005158f0, 0), (0x00515980, 0), (0x005159d0, 2), (0x00515a30, 2), (0x00515a80, 2),
+    (0x00515ad0, 1), (0x00515b00, 0), (0x004ff320, 4), (0x0053f950, 0))}
+
+SPECS += [
+    Spec("CLogicThread_UpdateTutorial", 0x0053fbb0, "logicthread", [], eax_mask=0, presets=tutorial_goal_state,
+         callees=TUTORIAL_GOAL_CALLEES),
+]
