@@ -821,3 +821,17 @@ SPECS += [
          callees={0x0060b9f0: (3, "thiscall", "this"), 0x00601370: (2, "thiscall", "this"),
                   0x0060ba60: (1, "thiscall", "probe")}),
 ]
+
+
+# -- WCBareVectorBase<String>::base_copy 0x40a380 (string_vector.cpp,
+# wip/console-r8): as StringVector_CopyConstruct (the source at world 0,
+# the destination in scratch slot 9). EAX is not meaningful (no caller uses
+# it); globals: name_null_string_count (a source without buffer sometimes
+# takes the copy path). Dead, in the inlined assign(x, 0, npos): the count
+# clamp to npos 0x40a425 and the self-assignment path 0x40a42c..0x40a481
+# (the destination is a new block).
+SPECS += [Spec("StringVector_BaseCopy", 0x0040a380, "fastcall",
+               [one_of(WORLD_BASE + SCRATCH + 9 * SCRATCH_SLOT_BYTES), anything, one_of(WORLD_BASE)],
+               eax_mask=0, presets=string_vector_state, globals=name_null_string_count, new_fails=0.1,
+               exempt_blocks=(0x0040a425, 0x0040a42c, 0x0040a436, 0x0040a43b, 0x0040a44b, 0x0040a44d, 0x0040a451,
+                              0x0040a479, 0x0040a481))]

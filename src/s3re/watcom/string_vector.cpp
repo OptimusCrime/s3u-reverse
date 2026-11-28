@@ -44,6 +44,15 @@
 //   ret 4: CopyVector (vector_base.h) with vtable 0x655440 and each string
 //   copy-constructed: allocator byte = the low byte of its index (the loop
 //   counter's stack slot), cleared, assign(from[i], 0, npos) 0x401d60.
+// WCBareVectorBase<String>::base_copy (0x0040a380; Dirk\Console.cpp's unit,
+//   12 callers): (const& from) ret 4, EAX not meaningful (no caller uses
+//   it): copies +4, filled and capacity (not the vtable, the length or the
+//   step); a capacity that is not positive gives no block (data 0);
+//   otherwise a block of capacity * 16 bytes (operator new; null: filled
+//   and capacity 0, the library's empty error hook) and the `filled`
+//   strings copy-constructed into it (each null-checked; allocator byte =
+//   the low byte of `from`, whose stack slot the empty allocator shares;
+//   cleared, then assign(from[i], 0, npos) inlined). Was App_sub_40a380.
 // WCValOrderedVector<String>::removeAt (0x00429750): (index) ret 4: no
 //   bounds check; elements index+1..length-1 are assigned one down (the
 //   inlined operator=, length re-read each time), the last one destroyed
@@ -259,6 +268,41 @@ VectorBase* CopyStrings(VectorBase* self, const VectorBase* from) {
 VectorBase* __fastcall StringVector_CopyConstruct(VectorBase* self, void* /*edx*/, const VectorBase* from) {
     return CopyStrings(self, from);
 }
+
+// Purpose: Copies the contents of a vector of strings into another one's
+// base (the derived classes' copy constructors and assignments call it).
+void __fastcall StringVector_BaseCopy(VectorBase* self, void* /*edx*/, const VectorBase* from) {
+    self->unk04 = from->unk04;
+    self->filled = from->filled;
+    self->capacity = from->capacity;
+    if (static_cast<std::int32_t>(self->capacity) <= 0) {
+        self->data = 0;
+        return;
+    }
+    self->data = reinterpret_cast<std::uintptr_t>(msvc6::GameOperatorNew(self->capacity * sizeof(String)));
+    if (self->data == 0) {
+        self->filled = 0;
+        self->capacity = 0;  // (then the library's empty error hook 0x59f200)
+        return;
+    }
+    const auto allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(from));
+    for (std::int32_t i = 0; i < self->filled; ++i) {
+        auto* to = reinterpret_cast<String*>(self->data + static_cast<std::uint32_t>(i) * sizeof(String));
+        if (to == nullptr) {
+            continue;
+        }
+        to->allocator = allocator;
+        msvc6::detail::Clear(to);
+        msvc6::String_AssignSubstr(to, nullptr,
+                                   reinterpret_cast<const String*>(from->data + static_cast<std::uint32_t>(i) *
+                                                                                    sizeof(String)),
+                                   0, msvc6::detail::Npos());
+    }
+}
+
+using StringVectorBaseCopyFn = void(__fastcall*)(VectorBase* self, void* edx, const VectorBase* from);
+S3RE_HOOK(0x0040a380, StringVector_BaseCopy, StringVectorBaseCopyFn, Original_StringVector_BaseCopy,
+          StringVector_BaseCopy);
 
 #pragma pack(push, 1)
 struct KeyedStringVector {  // WCSkipListDictKeyVal<unsigned int, WCValOrderedVector<String>>
@@ -648,6 +692,26 @@ VectorBase* __fastcall WrongCopy(VectorBase* self, void* edx, const VectorBase* 
     return self;
 }
 
+// base_copy through CompareCopy: the source header copied to one fixed
+// place first (the copies' allocator bytes are the low byte of its
+// address), the destination returned.
+alignas(16) std::uint8_t g_baseCopyFrom[0x40];
+template <StringVectorBaseCopyFn* Fn>
+VectorBase* __fastcall BaseCopyOn(VectorBase* to, void*, const VectorBase* from) {
+    std::memcpy(g_baseCopyFrom, from, sizeof(VectorBase));
+    (*Fn)(to, nullptr, reinterpret_cast<const VectorBase*>(g_baseCopyFrom));
+    return to;
+}
+StringVectorBaseCopyFn g_ourBaseCopy = &StringVector_BaseCopy;
+// Wrong: the allocator byte of the index, as the copy constructor's.
+void __fastcall WrongBaseCopy(VectorBase* self, void* edx, const VectorBase* from) {
+    StringVector_BaseCopy(self, edx, from);
+    for (std::int32_t i = 0; self->data != 0 && i < self->filled; ++i) {
+        Entries(reinterpret_cast<PtrVector*>(self))[i].allocator = static_cast<std::uint8_t>(i);
+    }
+}
+StringVectorBaseCopyFn g_wrongBaseCopy = &WrongBaseCopy;
+
 // Wrong: skips the last element.
 std::uint32_t __fastcall WrongDestructor(VectorBase* self, void* edx) {
     --self->filled;
@@ -679,6 +743,16 @@ S3RE_TEST(KeyedStringVector_Construct_MatchesOriginal) {
 S3RE_TEST(KeyedStringVector_Construct_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareCopy(probe, &KeyedCopyOn<&g_wrongKeyedCopy>, 20, &KeyedCopyOn<&Original_KeyedStringVector_Construct>);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(StringVector_BaseCopy_MatchesOriginal) {
+    CompareCopy(ctx, &BaseCopyOn<&g_ourBaseCopy>, 2000, &BaseCopyOn<&Original_StringVector_BaseCopy>);
+}
+
+S3RE_TEST(StringVector_BaseCopy_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareCopy(probe, &BaseCopyOn<&g_wrongBaseCopy>, 200, &BaseCopyOn<&Original_StringVector_BaseCopy>);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
