@@ -776,10 +776,10 @@ using PickFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::int3
 // Purpose: Whether the tutorial's wait before the next lesson is over
 // (counting it down on each call).
 std::uint32_t __fastcall CGameData_TutorialWaitDone(CGameData* world, void*) {
-    if (world->unk2d304 == 0) {
+    if (world->tutorial_wait == 0) {
         return 1;
     }
-    world->unk2d304 = world->unk2d304 - 1;
+    world->tutorial_wait = world->tutorial_wait - 1;
     return 0;
 }
 
@@ -823,10 +823,10 @@ S3RE_HOOK(0x004ff0a0, CGameData_PickHitArea, PickFn, Original_CGameData_PickHitA
 namespace {
 
 void CompareTutorialWait(test::Context& ctx, WorldQueryFn original, WorldQueryFn candidate, int cases) {
-    test::WorldPair worlds(ctx, offsetof(CGameData, unk2d308));
+    test::WorldPair worlds(ctx, offsetof(CGameData, tutorial_step));
     for (int i = 0; i < cases; ++i) {
         const auto wait = static_cast<std::int32_t>(ctx.rng().Chance(1, 2) ? ctx.rng().Below(3) : ctx.rng().Next32());
-        worlds.Both([&](CGameData* w) { w->unk2d304 = wait; });
+        worlds.Both([&](CGameData* w) { w->tutorial_wait = wait; });
         const std::uint32_t expected = original(worlds.original(), nullptr);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr);
         if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {

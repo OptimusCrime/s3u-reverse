@@ -200,6 +200,8 @@ add_library(s3re SHARED
     game/logic/victory_conditions.cpp
     game/logic/message_queue.cpp
     game/logic/logic_step.cpp
+    game/logic/tutorial.cpp
+    game/logic/logic_thread_calls.cpp
 
     # game/logic/commands/: ExecuteCommands and its parts
     game/logic/commands/command_helpers.cpp

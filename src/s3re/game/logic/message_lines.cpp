@@ -29,6 +29,16 @@
 //   assign(x, 0, npos), its self-assignment path included), then lifetime,
 //   kind and dirty copied. Used by PrepareDrawData for the draw data's
 //   message lines.
+// CLogicThread::ChatInputChar (0x0051e2e0; wip/logic-r8): (character)
+//   thiscall, ret 4, AL. A character that iswctype (0x61fe44) finds
+//   printable (mask 0x157: alpha, digit, punctuation, blank) and not a
+//   control character (0x20): with fewer than 80 characters in the chat
+//   text, a local wstring (allocator byte = the character's low byte) gets
+//   assign(1, c) (0x428610), the chat text becomes chat + it (operator+
+//   0x429600, then the inlined assign(sum, 0, npos)), both temporaries are
+//   destroyed (inlined) and the dirty flag set; returns 1 (also when the
+//   text is full, unchanged). Other characters return 0. EAX's upper bytes
+//   are left over in the original; callers read AL.
 // The inlined assign(x, 0, npos) of all three is std::wstring::assign
 // 0x428400's x != this path; ours calls that function (verified).
 
@@ -147,6 +157,40 @@ std::uint32_t __fastcall CLogicThread_ChatInputKey(CLogicThread* self, void*, st
 }
 
 using MessageLineAssignFn = MessageLine*(__fastcall*)(MessageLine* self, void* edx, const MessageLine* x);
+using ChatInputCharFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t character);
+
+constexpr std::uintptr_t kIswctype = 0x0061fe44;      // the CRT's iswctype(c, mask)
+constexpr std::uintptr_t kAssignRepeat = 0x00428610;  // std::wstring::assign(n, c)
+constexpr std::uintptr_t kWideConcat = 0x00429600;    // operator+(const wstring&, const wstring&), cdecl
+constexpr std::uint32_t kPrintable = 0x157;           // _ALPHA | _DIGIT | _PUNCT | _BLANK
+constexpr std::uint32_t kControl = 0x20;              // _CONTROL
+constexpr std::uint32_t kChatCharacters = 80;         // the chat text's limit (prompt included)
+
+// Purpose: Adds a typed character to the chat input (printable characters
+// only, up to 80).
+std::uint32_t __fastcall CLogicThread_ChatInputChar(CLogicThread* self, void*, std::uint32_t character) {
+    using IswctypeFn = int(__cdecl*)(std::uint32_t c, std::uint32_t mask);
+    const auto iswctype = reinterpret_cast<IswctypeFn>(kIswctype);
+    if (iswctype(character, kPrintable) == 0 || iswctype(character, kControl) != 0) {
+        return 0;
+    }
+    ChatInput* chat = ChatOf(self);
+    if (chat->text.len >= kChatCharacters) {
+        return 1;
+    }
+    WString typed{};
+    typed.allocator = static_cast<std::uint8_t>(character);
+    using AssignRepeatFn = WString*(__fastcall*)(WString*, void*, std::uint32_t n, std::uint32_t c);
+    reinterpret_cast<AssignRepeatFn>(kAssignRepeat)(&typed, nullptr, 1, character);
+    WString joined;
+    using ConcatFn = WString*(__cdecl*)(WString* result, const WString* left, const WString* right);
+    const WString* sum = reinterpret_cast<ConcatFn>(kWideConcat)(&joined, &chat->text, &typed);
+    Assign(&chat->text, sum, 0, g_wstringNpos);
+    DestroyText(joined);
+    DestroyText(typed);
+    chat->dirty = 1;
+    return 1;
+}
 
 // Purpose: Copies a message line (text, time left, kind, redraw flag), e.g.
 // into the draw data.
@@ -163,6 +207,8 @@ S3RE_HOOK(0x0051e440, CLogicThread_ShowMessage, ShowMessageFn, Original_CLogicTh
           CLogicThread_ShowMessage);
 S3RE_HOOK(0x0051e160, CLogicThread_ChatInputKey, ChatInputKeyFn, Original_CLogicThread_ChatInputKey,
           CLogicThread_ChatInputKey);
+S3RE_HOOK(0x0051e2e0, CLogicThread_ChatInputChar, ChatInputCharFn, Original_CLogicThread_ChatInputChar,
+          CLogicThread_ChatInputChar);
 
 // ---------------------------------------------------------------------------
 // Tests: random thread images whose message lines and chat text hold
@@ -326,7 +372,8 @@ Case RandomCase(test::Rng& rng) {
 }
 
 // Runs one function on a materialized copy of the case.
-Snapshot Run(const Case& c, int mode, ShowMessageFn show, ChatInputKeyFn key, MessageLineAssignFn assign) {
+Snapshot Run(const Case& c, int mode, ShowMessageFn show, ChatInputKeyFn key, MessageLineAssignFn assign,
+             ChatInputCharFn chatChar) {
     std::vector<std::uint8_t> image = c.image;
     WString argument{};
     argument.allocator = static_cast<std::uint8_t>(c.kind);
@@ -336,7 +383,9 @@ Snapshot Run(const Case& c, int mode, ShowMessageFn show, ChatInputKeyFn key, Me
     stubs.SetWorld(reinterpret_cast<CGameData*>(image.data()));
     stubs.Install<1, kPushUiFeedback>();
     std::uint32_t eax = 0;
-    if (mode == 1) {
+    if (mode == 3) {
+        eax = chatChar(t, nullptr, c.key) & 0xff;
+    } else if (mode == 1) {
         eax = key(t, nullptr, c.key) & 0xff;
     } else if (mode == 0) {
         show(t, nullptr, argument, c.kind);
@@ -356,16 +405,21 @@ Snapshot Run(const Case& c, int mode, ShowMessageFn show, ChatInputKeyFn key, Me
 }
 
 void CompareMessages(test::Context& ctx, int mode, ShowMessageFn show, ChatInputKeyFn key, int cases,
-                     MessageLineAssignFn assign = &MessageLine_Assign) {
+                     MessageLineAssignFn assign = &MessageLine_Assign,
+                     ChatInputCharFn chatChar = &CLogicThread_ChatInputChar) {
     const bool chat = mode == 1;
     for (int i = 0; i < cases; ++i) {
         Case c = RandomCase(ctx.rng());
         if (mode == 2 && ctx.rng().Chance(1, 4)) {
             c.kind = static_cast<std::int32_t>(c.key % 20);  // self-assignment
         }
+        if (mode == 3) {
+            static const std::uint32_t kCharacters[] = {'a', 'Z', '5', ' ', '!', 0xe4, 0x3b1, 9, 13, 0x7f, 0};
+            c.key = ctx.rng().Chance(3, 4) ? kCharacters[ctx.rng().Below(11)] : ctx.rng().Next32();
+        }
         const Snapshot expected = Run(c, mode, Original_CLogicThread_ShowMessage, Original_CLogicThread_ChatInputKey,
-                                      Original_MessageLine_Assign);
-        const Snapshot actual = Run(c, mode, show, key, assign);
+                                      Original_MessageLine_Assign, Original_CLogicThread_ChatInputChar);
+        const Snapshot actual = Run(c, mode, show, key, assign, chatChar);
         bool same = S3RE_EXPECT_EQ(expected.eax, actual.eax);
         same &= S3RE_EXPECT(expected.fields == actual.fields);
         same &= S3RE_EXPECT(expected.other == actual.other);
@@ -414,6 +468,23 @@ S3RE_TEST(CLogicThread_ShowMessage_ComparisonDetectsWrongImplementation) {
 }
 S3RE_TEST(CLogicThread_ChatInputKey_MatchesOriginal) {
     CompareMessages(ctx, 1, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 1500);
+}
+// Wrong: a blank (space) is not accepted.
+std::uint32_t __fastcall WrongChatInputChar(CLogicThread* self, void* edx, std::uint32_t character) {
+    if (static_cast<std::uint16_t>(character) == ' ') {
+        return 0;
+    }
+    return CLogicThread_ChatInputChar(self, edx, character);
+}
+
+S3RE_TEST(CLogicThread_ChatInputChar_MatchesOriginal) {
+    CompareMessages(ctx, 3, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 1500);
+}
+S3RE_TEST(CLogicThread_ChatInputChar_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareMessages(probe, 3, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 500, &MessageLine_Assign,
+                    &WrongChatInputChar);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 S3RE_TEST(MessageLine_Assign_MatchesOriginal) {
     CompareMessages(ctx, 2, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 1500);

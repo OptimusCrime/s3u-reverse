@@ -670,7 +670,8 @@ struct CGameDataFields {
     std::uint8_t search_generation;                         // 0x002d300
     std::uint8_t draw_call_counter;                         // 0x002d301 (volatile)
     std::uint8_t pad2d302[2];
-    std::int32_t unk2d304, unk2d308;                        // 0x002d304 (saved)
+    std::int32_t tutorial_wait;                             // 0x002d304 (saved) ticks until the tutorial goes on (StartTutorialWait 0x515af0: 100000)
+    std::int32_t tutorial_step;                             // 0x002d308 (saved) the tutorial step (CLogicThread::AdvanceTutorialStep, table 0x72faf0)
     std::int32_t unk2d30c, unk2d310;
     std::int32_t jump_return_x, jump_return_y;              // 0x002d314 screen-centre tile before the first of a series of
                                                             //           notification jumps (GoToNotification; 0 = none)
@@ -762,7 +763,8 @@ static_assert(offsetof(CGameData, random_state) == 0x2d2dc);
 static_assert(offsetof(CGameData, last_search_x) == 0x2d2e4);
 static_assert(offsetof(CGameData, ui_cursor_mode) == 0x2d2f0);
 static_assert(offsetof(CGameData, search_generation) == 0x2d300);
-static_assert(offsetof(CGameData, unk2d304) == 0x2d304);
+static_assert(offsetof(CGameData, tutorial_wait) == 0x2d304);
+static_assert(offsetof(CGameData, tutorial_step) == 0x2d308);
 static_assert(offsetof(CGameData, jump_return_x) == 0x2d314);
 static_assert(offsetof(CGameData, jump_tick) == 0x2d31c);
 static_assert(offsetof(CGameData, notification_icon) == 0x2d2cc);

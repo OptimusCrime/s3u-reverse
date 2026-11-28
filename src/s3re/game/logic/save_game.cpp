@@ -244,8 +244,8 @@ void WriteGeneral(CGameData* world, CMapFile* file) {
     general->active_players = g_strengthDivisor;
     general->game_outcome = g_gameOutcome;
     general->mission_minus_one = g_campaignMission - 1;
-    general->unk2d304 = world->unk2d304;
-    general->unk2d308 = world->unk2d308;
+    general->unk2d304 = world->tutorial_wait;
+    general->unk2d308 = world->tutorial_step;
     general->presence_max_player = world->presence_max_player;
     WriteChunk(file, SaveChunk::General, general);
     FreeChunk(general);

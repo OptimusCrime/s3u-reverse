@@ -216,8 +216,8 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D2F4, 0x2D2F8, 0x2D2FC | int32 | UpdateEnvironment counters (Init: 0, 0, 0xD) | sim | strong |
 | 0x2D300 | uint8 | search generation (stamped into tile +0xB) | skip | verified |
 | 0x2D301 | uint8 | PrepareDrawData call counter | volatile, skip | verified |
-| 0x2D304 | int32 | tutorial wait countdown (StartTutorialWait 0x515AF0 = 100000, a click sets 1, TutorialWaitDone 0x515B00 counts down); saved (`unk2d304`) | UI | verified (0x515B00) |
-| 0x2D308 | int32 | saved; UI code 0x53F950/0x53FBB0 | UI? | guess |
+| 0x2D304 | int32 | `tutorial_wait`: tutorial wait countdown (StartTutorialWait 0x515AF0 = 100000, a click sets 1, TutorialWaitDone 0x515B00 counts down); saved | UI | verified (0x515B00) |
+| 0x2D308 | int32 | `tutorial_step`: the tutorial step; AdvanceTutorialStep 0x53F950 sets the next one from the table 0x72FAF0, UpdateTutorial 0x53FBB0 checks its goal; saved | UI | verified (0x53F950) |
 | 0x2D314, 0x2D318 | int32 | `jump_return_x/y`: screen-centre tile before a series of notification jumps (GoToNotification 0x4FEE90; 0 = none; ProcessEvents jumps back) | UI | verified (0x4FEE90) |
 | 0x2D31C | uint32 | `jump_tick`: game tick of the last notification jump (the return position is kept for 20 s) | UI | verified (0x4FEE90) |
 

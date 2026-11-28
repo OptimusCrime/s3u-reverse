@@ -455,4 +455,16 @@ inline constexpr GameGlobal<const std::uint32_t[]> g_buildingNameTexts{0x6a00a8}
 // the goods it takes in).
 inline constexpr GameGlobal<const std::int32_t[][4]> g_buildingPanelGoods{0x6a018c};
 
+// wip/logic-r8: the tutorial's steps (CLogicThread::AdvanceTutorialStep
+// 0x53f950): {step, next step, message kind (253 / 254), text id}; the
+// search for the current step has no end marker.
+struct TutorialStep {
+    std::int32_t step;
+    std::int32_t next;
+    std::int32_t kind;
+    std::uint32_t text;
+};
+static_assert(sizeof(TutorialStep) == 16);
+inline constexpr GameGlobal<const TutorialStep[]> g_tutorialSteps{0x72faf0};
+
 }  // namespace s3re::game

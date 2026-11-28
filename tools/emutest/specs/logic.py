@@ -2681,3 +2681,126 @@ SPECS += [
                         0x0053e450, 0x0053e48d, 0x0053e4a1, 0x0053e4a6, 0x0053e4aa, 0x0053e4cf, 0x0053e4d5,
                         0x0053e4e3, 0x0053e508, 0x0053e50c)),
 ]
+
+
+# CLogicThread_ShowTutorialText / CLogicThread_AdvanceTutorialStep
+# (tutorial.cpp, wip/logic-r8): the text a wstring at TUTORIAL_STRING whose
+# characters (frozen count byte 0xff, so the lines copy them) follow a
+# guard of spaces; ClearMessages and ShowMessage probed (the line by its
+# characters, the allocator byte left out: a stack byte in the original),
+# the line strings built by the real wstring code. AdvanceTutorialStep: the
+# step one of the table's, TextAddress returns a narrow text in the world
+# (or null), NarrowToWideString modelled (step_widen), ShowTutorialText
+# probed with its text's characters.
+TUTORIAL_STRING = LOGIC_THREAD + 0xc00
+TUTORIAL_CHARS = LOGIC_THREAD + 0xd00   # guard at -0x10..-2, count byte at -1
+TUTORIAL_NARROW = LOGIC_THREAD + 0x1800
+
+
+def tutorial_text(rng, pool, args):
+    length = rng.choice([0, rng.randrange(80), rng.randrange(400), 75, 76, 150])
+    spaces = rng.random() < 0.85
+    fields = [(TUTORIAL_CHARS - 0x10 + 2 * i, 0x20, 2) for i in range(7)] + [(TUTORIAL_CHARS - 2, 0xff00, 2)]
+    for i in range(length):
+        c = 0x20 if spaces and rng.random() < 0.25 else rng.randint(0x61, 0x7a)
+        fields.append((TUTORIAL_CHARS + 2 * i, c, 2))
+    fields.append((TUTORIAL_CHARS + 2 * length, 0, 2))
+    ptr = 0 if length == 0 and rng.random() < 0.5 else WORLD_BASE + TUTORIAL_CHARS
+    fields += [(TUTORIAL_STRING + 4, ptr, 4), (TUTORIAL_STRING + 8, length, 4), (TUTORIAL_STRING + 0xc, length, 4)]
+    return fields
+
+
+def tutorial_line_record(machine, ecx, args):
+    ptr, length = args[1], args[2]
+    return (machine.guest_read(ptr, 2 * length) if ptr else b"", length, args[3], args[4])
+
+
+def tutorial_text_record(machine, ecx, args):
+    ptr, length = struct.unpack("<II", machine.guest_read(args[0] + 4, 8))
+    return (machine.guest_read(ptr, 2 * length) if ptr else b"", length, args[1])
+
+
+def tutorial_step_state(rng, pool, args):
+    step = rng.choice([0, 1, 3, 20, 55, 250, 340, 350])
+    fields = [(0x2d308, step, 4)]
+    length = rng.choice([0, 1, rng.randrange(120)])
+    for i in range(length):
+        fields.append((TUTORIAL_NARROW + i, rng.choice([0x20, rng.randint(0x61, 0x7a)]), 1))
+    fields.append((TUTORIAL_NARROW + length, 0, 1))
+    return fields
+
+
+SPECS += [
+    Spec("CLogicThread_ShowTutorialText", 0x00540400, "logicthread",
+         [lambda rng, pool: WORLD_BASE + TUTORIAL_STRING, lambda rng, pool: rng.choice([253, 253, 254, 0, 255])],
+         eax_mask=0, presets=tutorial_text,
+         callees={0x0051e650: (0, "thiscall", "probe"),                              # ClearMessages
+                  0x0051e440: (5, "thiscall", "probe", None, tutorial_line_record)}),  # ShowMessage
+    # Dead: the narrow string is back to an unshared buffer when it is
+    # erased (the temporaries that shared it are gone): its _Split
+    # 0x53faf0/0x53faf5, the true _Grow(0, false) 0x53fb52 and the count
+    # decrement of the final free 0x53fb74/0x53fb78 can't run.
+    Spec("CLogicThread_AdvanceTutorialStep", 0x0053f950, "logicthread", [], eax_mask=0,
+         presets=tutorial_step_state, exempt_blocks=(0x0053faf0, 0x0053faf5, 0x0053fb52, 0x0053fb74, 0x0053fb78),
+         callees={0x005faaa0: (2, "thiscall", lambda h: 0 if h % 8 == 0 else WORLD_BASE + TUTORIAL_NARROW),
+                  0x0060b840: (0, "cdecl", "probe", step_widen),                        # NarrowToWideString
+                  0x00540400: (2, "thiscall", "probe", None, tutorial_text_record)}),   # ShowTutorialText
+]
+
+
+# CLogicThread_TakeDrawRequest / UpdateLobby / OnExit
+# (logic_thread_calls.cpp, wip/logic-r8): their objects FAKE_VTABLE objects
+# behind the fake thread (or 0 for the lobby and the draw data), the
+# callees probed (CEvent::Reset runs: its ResetEvent is an API probe).
+CALLS_OBJECTS = LOGIC_THREAD + 0x1000
+
+
+def calls_thread(rng, pool, args):
+    t = LOGIC_THREAD
+    fields = [(CALLS_OBJECTS + 0x10 * k, FAKE_VTABLE, 4) for k in range(48)]
+    fields += [(t + 0x3d8, WORLD_BASE + CALLS_OBJECTS, 4),
+               (t + 0x66c, 0 if rng.random() < 0.25 else WORLD_BASE + CALLS_OBJECTS + 0x10, 4),
+               (t + 0x3d0, 0 if rng.random() < 0.25 else WORLD_BASE + CALLS_OBJECTS + 0x40, 4)]
+    for p in range(20):
+        fields.append((t + 0x350 + 4 * p, 0 if rng.random() < 0.5 else WORLD_BASE + CALLS_OBJECTS + 0x100 + 0x10 * p, 4))
+    return fields
+
+
+SPECS += [
+    Spec("CLogicThread_TakeDrawRequest", 0x0051f0b0, "logicthread", [], presets=calls_thread, virtuals={0: 2}),
+    Spec("CLogicThread_UpdateLobby", 0x00541170, "logicthread", [], eax_mask=0, presets=calls_thread,
+         callees={0x005dd3a0: (0, "thiscall", "probe"), 0x004532f0: (1, "thiscall", "probe"),
+                  0x00540980: (0, "thiscall", "probe"), 0x00540f40: (0, "thiscall", "probe")}),
+    Spec("CLogicThread_OnExit", 0x0053dab0, "logicthread", [], eax_mask=0, presets=calls_thread, virtuals={0: 1},
+         globals=lambda rng, pool, args: [(0x7a800c, rng.getrandbits(32), 4)],
+         callees={0x0060b560: (0, "thiscall", "probe"), 0x0053f5c0: (0, "thiscall", "probe"),
+                  0x0060d3e0: (0, "thiscall", "probe"), 0x0053e830: (1, "thiscall", "probe"),
+                  0x005b6470: (0, "thiscall", "probe"), 0x00405a50: (0, "thiscall", "probe")}),
+]
+
+
+# CLogicThread_ChatInputChar (message_lines.cpp, wip/logic-r8): the message
+# state of the ShowMessage specs (msg_state), the chat text sometimes full
+# (80 characters or more: then nothing is read from it); the real iswctype,
+# wstring assign(n, c) and operator+ run.
+def chat_char_state(rng, pool, args):
+    fields = msg_state(rng, pool, args)
+    if rng.random() < 0.15:
+        fields.append((LOGIC_THREAD + 0x3f8 + 8, rng.choice([80, 81, 200]), 4))
+    return fields
+
+
+SPECS += [
+    Spec("CLogicThread_ChatInputChar", 0x0051e2e0, "logicthread",
+         # (characters below 256 only: iswctype asks GetStringTypeW for the
+         # others, which the emulator doesn't run; the in-process test
+         # covers them)
+         [lambda rng, pool: rng.choice([0x61, 0x5a, 0x35, 0x20, 0x21, 0xe4, 9, 13, 0x7f, 0, rng.randrange(256),
+                                        rng.randrange(256) | (rng.getrandbits(16) << 16)])],
+         eax_mask=0xFF, presets=chat_char_state, globals=msg_null_count,
+         # Dead: the sum is a fresh buffer that the chat text then shares,
+         # so its free 0x51e3a9 can't run; the typed character's string is
+         # never shared (operator+ copies it), so its count decrement
+         # 0x51e3d0/0x51e3d4 can't either.
+         exempt_blocks=(0x0051e3a9, 0x0051e3d0, 0x0051e3d4)),
+]

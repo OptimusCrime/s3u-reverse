@@ -107,8 +107,8 @@ void LoadGeneral(CGameData* world, CMapFile* file) {
     g_strengthDivisor = general->active_players;
     g_gameOutcome = general->game_outcome;
     g_campaignMission = general->mission_minus_one + 1;
-    world->unk2d304 = general->unk2d304;
-    world->unk2d308 = general->unk2d308;
+    world->tutorial_wait = general->unk2d304;
+    world->tutorial_step = general->unk2d308;
     world->presence_max_player = general->presence_max_player;
     ReleaseChunk(file, SaveChunk::General);
 }
