@@ -2322,3 +2322,59 @@ SPECS += [
     dlg_spec("CListView_UpdateScrollBar", 0x00425b50, [], callees=DLG_SCROLL_CALLEES, exempt_blocks=(0x00425c72,),
              presets=dlg_presets(dlg_vb(4), [(DLG_THIS + 0x19c, WORLD_BASE + MEMBER_VBTABLE, 4)], dlg_scroll_counts)),
 ]
+
+
+# -- wip/dialog-r8 batch 4: text view layout, list box clicks
+# (ui_text_view_layout.cpp). Counts small or huge, line heights never 0 (a
+# division), rects small; OnResized's rect at DLG_OTHER. The list box's
+# listener none or an object with the fake vtable (slot 0: 2 arguments).
+DLG_TEXT_CALLEES = dict(DLG_CELL_CALLEES)
+DLG_TEXT_CALLEES.update({0x420d90: (0, "thiscall", "probe"), 0x418380: (5, "thiscall", "probe")})
+DLG_UPDATE_CALLEES = dict(DLG_TEXT_CALLEES)
+del DLG_UPDATE_CALLEES[0x420d90]  # UpdateLayout itself
+
+
+def dlg_small_count(rng):
+    return (rng.getrandbits(31) if rng.random() < 0.1 else rng.randint(-3, 14)) & 0xFFFFFFFF
+
+
+def dlg_line_height(rng):
+    return (-rng.randint(1, 9) if rng.random() < 0.12 else rng.randint(1, 16)) & 0xFFFFFFFF
+
+
+def dlg_text_view(at):
+    def part(rng):
+        return [(at + o, dlg_small_count(rng), 4) for o in (0x400, 0x404, 0x408)] + \
+               [(at + 0x40c, dlg_line_height(rng), 4), (at + 0xc4, WORLD_BASE + MEMBER_VBTABLE, 4)]
+    return part
+
+
+def dlg_rect_at(at):
+    return lambda rng: [(at + 4 * k, rng.randint(-20, 200) & 0xFFFFFFFF, 4) for k in range(4)]
+
+
+def dlg_click_position(rng, pool):
+    return (rng.randint(-5, 120) & 0xFFFF) | ((rng.randint(-5, 120) & 0xFFFF) << 16)
+
+
+def dlg_list_box(rng):
+    rect = [rng.randint(-5, 20), rng.randint(-5, 20), rng.randint(20, 120), rng.randint(20, 120)]
+    return [(DLG_THIS - 0x48 + 4 * k, v & 0xFFFFFFFF, 4) for k, v in enumerate(rect)] + [
+        (DLG_THIS - 0x438, rng.choice([0, 0, 0, 1]), 1), (DLG_THIS - 0x50, dlg_line_height(rng), 4),
+        (DLG_THIS - 0x34, rng.randint(-3, 10) & 0xFFFFFFFF, 4), (DLG_THIS - 0x10, rng.randrange(20), 4),
+        (DLG_THIS - 0x390, rng.choice([0, WORLD_BASE + DLG_OTHER, WORLD_BASE + DLG_OTHER]), 4),
+        (DLG_OTHER, FAKE_VTABLE, 4)]
+
+
+SPECS += [
+    # 0x420df1, 0x420e50: the scroll bar (a member, this + 0xc0) tested for null: dead.
+    dlg_spec("CTextView_UpdateLayout", 0x00420d90, [], callees=DLG_UPDATE_CALLEES,
+             exempt_blocks=(0x00420df1, 0x00420e50), presets=dlg_presets(dlg_vb(4), dlg_text_view(DLG_THIS))),
+    dlg_spec("CTextView_OnResized", 0x00421bb0, [one_of(WORLD_BASE + DLG_OTHER), anything], callees=DLG_TEXT_CALLEES,
+             presets=dlg_presets(dlg_text_view(DLG_THIS - 0x434), dlg_rect_at(DLG_OTHER),
+                                 [(MEMBER_VBTABLE + 4, 0x100, 4)])),
+    # 0x420480: the list box's own address (this - 0x444) tested for null: dead.
+    dlg_spec("CListBox_OnLButtonDown", 0x004203f0, [anything, anything, dlg_click_position, anything, anything],
+             callees=DLG_TEXT_CALLEES, virtuals={0x00: 2, 0x1c: 0}, exempt_blocks=(0x00420480,),
+             presets=dlg_presets(dlg_vb(-0x440), dlg_list_box)),
+]
