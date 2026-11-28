@@ -19,3 +19,4 @@ session entry). A new area gets a new file and a line here.
 | `docs/todo/naming.md` | provisional names to audit, constructors, remaining `unk` fields |
 | `docs/todo/evidence.md` | whole-game evidence gaps (jobs, spells, ExecuteCommands ids), emulator tooling issues, longer and more varied runs, the live-vs-replay hash difference |
 | `docs/todo/known-differences.md` | known behaviour differences to clean up, libraries and the standalone build (CRT behaviour to copy, third-party identifications), work postponed by decision (network and lobby) |
+| `docs/todo/ui.md` | UI controls of dialog.cpp still to reimplement (Draw functions, CListView, constructors), the member test kit |
