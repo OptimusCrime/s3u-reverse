@@ -287,13 +287,13 @@ inline constexpr GameGlobal<std::int32_t> g_hitAreaDrawCount{0x7dfd60};   // ent
 inline constexpr GameGlobal<std::int32_t> g_hitAreaReadHalf{0x7dfd64};    // 0 or 1
 // Cleared by CGameData::FinishInitialising (0x4fce90), meaning unknown
 // (0x7dfd34..0x7dfd3c are also set by 0x4b26c0 and ProcessEvents).
-inline constexpr GameGlobal<std::int32_t> g_unk7dfd34{0x7dfd34};
-inline constexpr GameGlobal<std::int32_t> g_unk7dfd38{0x7dfd38};
-inline constexpr GameGlobal<std::int32_t> g_unk7dfd3c{0x7dfd3c};
+inline constexpr GameGlobal<std::int32_t> g_dragSelecting{0x7dfd34};
+inline constexpr GameGlobal<std::int32_t> g_lastMouseX{0x7dfd38};
+inline constexpr GameGlobal<std::int32_t> g_lastMouseY{0x7dfd3c};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd40{0x7dfd40};
 // Set by CGameData::CGameData 0x4fc990 (meaning unknown): 0x7dfd70..0x7dfd7c
 // = 0, 0x730f4c = 1, 0x730f50 = 3, 0x7deb4c = 0.
-inline constexpr GameGlobal<std::int32_t> g_unk7dfd70{0x7dfd70};
+inline constexpr GameGlobal<std::int32_t> g_rightDownTime{0x7dfd70};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd74{0x7dfd74};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd78{0x7dfd78};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd7c{0x7dfd7c};
@@ -761,5 +761,45 @@ inline constexpr GameGlobal<char*> g_paintlibTraceFile{0x7e8bbc};
 // tests of the static-initializer stubs take back the entries they add.
 inline constexpr GameGlobal<std::uintptr_t*> g_onexitEnd{0x7eaac0};
 inline constexpr GameGlobal<std::uintptr_t*> g_onexitBegin{0x7eaac4};
+
+
+// wip/events-r8 batch: CLogicThread::ProcessEvents (logic/events/).
+// The scroll mode from the game config (GameConfig::Dword78, OnStart
+// 0x53ca52): 0 = scroll by dragging with the right button, 1 = at the
+// screen edges (ProcessEvents' EdgeScroll; RightUp then allows longer
+// clicks).
+inline constexpr GameGlobal<std::int32_t> g_scrollMode{0x7dfd80};
+// The scroll speed: GameConfig::Dword7C * 4 (OnStart 0x53ca64); keys and
+// drags move the camera by it.
+inline constexpr GameGlobal<std::int32_t> g_scrollSpeed{0x7acf84};
+// Where the drag selection started (the map click, ProcessEvents 0x533980).
+inline constexpr GameGlobal<std::int32_t> g_dragStartX{0x7dfb9c};
+inline constexpr GameGlobal<std::int32_t> g_dragStartY{0x7dfb98};
+// The cheat input: g_cheatKeys counts the keys of the sequence typed so far
+// (O I U J K: 1..5); at K (5) g_cheatMode becomes 9 and the next keys go to
+// the cheat handler (F7 ends it).
+inline constexpr GameGlobal<std::int32_t> g_cheatMode{0x7dfda8};
+inline constexpr GameGlobal<std::int32_t> g_cheatKeys{0x7dfdac};
+// 1 from OnStart (0x53ca78): a building placed from the build menu ends the
+// placement (ProcessEvents 0x533109); name from that use.
+inline constexpr GameGlobal<std::int32_t> g_placeOneBuilding{0x730f54};
+// The -record / -play command-line options (CConsoleThread::OnStart):
+// commands go to / also come from Siedler3.evt. ProcessEvents sends
+// scrolls as commands while recording and ignores map input while playing.
+inline constexpr GameGlobal<std::uint8_t> g_optionRecord{0x7a800a};
+inline constexpr GameGlobal<std::uint8_t> g_optionPlay{0x7a800b};
+// --- events-r8 part A (build menu, settler menus) ---
+// (end of the part)
+//
+// --- events-r8 part B (statistics) ---
+// (end of the part)
+//
+// --- events-r8 part C (building info) ---
+// (end of the part)
+//
+// --- events-r8 part D (message menus, players, soldiers) ---
+// (end of the part)
+//
+// --- events-r8 end ---
 
 }  // namespace s3re::game

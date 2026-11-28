@@ -455,4 +455,23 @@ inline constexpr GameGlobal<const std::uint32_t[]> g_buildingNameTexts{0x6a00a8}
 // the goods it takes in).
 inline constexpr GameGlobal<const std::int32_t[][4]> g_buildingPanelGoods{0x6a018c};
 
+
+// wip/events-r8 batch: CLogicThread::ProcessEvents (logic/events/).
+// --- events-r8 frame ---
+// (end of the part)
+//
+// --- events-r8 part A (build menu, settler menus) ---
+// (end of the part)
+//
+// --- events-r8 part B (statistics) ---
+// (end of the part)
+//
+// --- events-r8 part C (building info) ---
+// (end of the part)
+//
+// --- events-r8 part D (message menus, players, soldiers) ---
+// (end of the part)
+//
+// --- events-r8 end ---
+
 }  // namespace s3re::game

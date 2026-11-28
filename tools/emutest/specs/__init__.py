@@ -28,7 +28,7 @@ from __future__ import annotations
 import ast as _ast
 import os as _os
 
-PARTS = ['common', 'ai', 'buildings', 'economy', 'environment', 'fileformats', 'framework', 'graphics', 'logic', 'map', 'mapgen', 'msvc6', 'net', 'pathing', 'settlers', 'sound', 'spells', 'thirdparty', 'ui', 'watcom', 'world', 'self_test', 'covered_elsewhere']
+PARTS = ['common', 'ai', 'buildings', 'economy', 'environment', 'fileformats', 'framework', 'graphics', 'logic', 'logic_events', 'map', 'mapgen', 'msvc6', 'net', 'pathing', 'settlers', 'sound', 'spells', 'thirdparty', 'ui', 'watcom', 'world', 'self_test', 'covered_elsewhere']
 
 
 class NameClashError(Exception):

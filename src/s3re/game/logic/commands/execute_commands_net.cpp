@@ -183,7 +183,7 @@ void PushReply(Run& run, CommandId id, std::uint8_t player) {
 // The player whose network id (Player +0x1c) is `id`, or 20.
 std::uint32_t PlayerOfNetId(CGameData* world, std::uint32_t id) {
     std::uint32_t player = 0;
-    while (player < kPlayers && static_cast<std::uint32_t>(PlayerAt(world, player).unk01c) != id) {
+    while (player < kPlayers && static_cast<std::uint32_t>(PlayerAt(world, player).net_slot) != id) {
         ++player;
     }
     return player;
@@ -207,7 +207,7 @@ void HandOverToComputer(Run& run, std::uint32_t player, std::uint32_t upperBits,
     if (p.active != kPlayerActive) {
         return;
     }
-    GameDebugLog(texts::kDroppedPlayer, player, static_cast<std::uint32_t>(p.unk01c));
+    GameDebugLog(texts::kDroppedPlayer, player, static_cast<std::uint32_t>(p.net_slot));
     PlayerAt(run.world(), player).active = kPlayerDropped;
     if (run.world()->objectives_enabled != 0) {
         return;
@@ -469,7 +469,7 @@ void DropPlayer(Run& run) {
     HandOverToComputer(run, player, player * 41, kDropAssertLine);  // upper bits: the original's EDX (player * 41)
     ShowPlayerText(run, kTextPlayerDropped, run.Byte(0), run.Byte(0));
     std::uint8_t* kill = run.frame->kill_message;
-    kill[1] = static_cast<std::uint8_t>(PlayerAt(run.world(), run.Byte(0)).unk01c);
+    kill[1] = static_cast<std::uint8_t>(PlayerAt(run.world(), run.Byte(0)).net_slot);
     PushToNet(run.thread, kill, kill[2] >> 2);
     run.thread->player_flags[run.Byte(0)] = 0;
     CallThread<kUpdatePlayers>(run.thread);
@@ -556,7 +556,7 @@ void NetLagReport(Run& run) {
             continue;
         }
         std::uint16_t lag = 0;
-        std::memcpy(&lag, message + 10 + static_cast<std::uint32_t>(p.unk01c) * 4, 2);
+        std::memcpy(&lag, message + 10 + static_cast<std::uint32_t>(p.net_slot) * 4, 2);
         if (lag > kLagLimit) {
             ShowPlayerText(run, kTextLagging, player, player);
         }
@@ -747,7 +747,7 @@ void RandomizeNetCase(test::Context& ctx, Bench& bench) {
         w->flag15394b0 = firstComputer;
         for (std::uint32_t p = 0; p < 20; ++p) {
             w->players[p].active = active[p];
-            w->players[p].unk01c = netId[p];
+            w->players[p].net_slot = netId[p];
         }
         CLogicThread* thread = bench.Thread(w);
         thread->save_acks = acks;

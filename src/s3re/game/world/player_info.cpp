@@ -177,10 +177,10 @@ void __fastcall CGameData_InitPlayerInfo(CGameData* world, void*) {
         }
         if (player.active != 0) {
             CallThis(kLogPlayerLand, world, p);
-            player.unk088 = 1;
+            player.chat_recipient = 1;
             g_strengthDivisor = g_strengthDivisor + 1;
         } else {
-            player.unk088 = 0;
+            player.chat_recipient = 0;
         }
     }
     g_gameOutcome = kOutcomeUndecided;

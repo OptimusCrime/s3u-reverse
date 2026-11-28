@@ -689,7 +689,7 @@ S3RE_HOOK(0x0053f530, CLogicThread_ClearPendingUiRefresh, LogicThreadFn, Origina
 // redraw of the menus (probably after an input event was handled).
 std::uint32_t __fastcall CLogicThread_ClearPendingUiRefresh(CLogicThread* self, void* /*edx*/) {
     CLogicThread* thread = LogicThreadOf(self);
-    thread->unk074 = 0;
+    thread->idle_steps = 0;
     if (thread->pending_ui_refresh == 0) {
         return 0;
     }
@@ -731,7 +731,7 @@ void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, i
 
 std::uint32_t __fastcall WrongClearPendingUiRefresh(CLogicThread* self, void* edx) {
     const std::uint32_t r = CLogicThread_ClearPendingUiRefresh(self, edx);
-    LogicThreadOf(self)->unk074 = 1;  // wrong: +0x74 not cleared
+    LogicThreadOf(self)->idle_steps = 1;  // wrong: +0x74 not cleared
     return r;
 }
 

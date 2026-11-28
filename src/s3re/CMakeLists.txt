@@ -207,6 +207,20 @@ add_library(s3re SHARED
     game/logic/commands/execute_commands_trade.cpp
     game/logic/commands/execute_commands_units.cpp
 
+    # game/logic/events/: ProcessEvents and its parts
+    game/logic/events/events_build_menu.cpp
+    game/logic/events/events_building_info.cpp
+    game/logic/events/events_keys.cpp
+    game/logic/events/events_map.cpp
+    game/logic/events/events_message_menus.cpp
+    game/logic/events/events_mouse.cpp
+    game/logic/events/events_panel.cpp
+    game/logic/events/events_players.cpp
+    game/logic/events/events_settler_menus.cpp
+    game/logic/events/events_soldiers.cpp
+    game/logic/events/events_statistics.cpp
+    game/logic/events/process_events.cpp
+
     # game/ai/: computer players (Rainer/*.cpp)
     game/ai/ai_agent_factory.cpp
     game/ai/ai_agent_slots.cpp

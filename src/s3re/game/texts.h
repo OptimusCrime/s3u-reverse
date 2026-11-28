@@ -795,4 +795,28 @@ inline constexpr GameText kSettlerTypeTodoLog{0x6a000c};     // "Art der Figur: 
 inline constexpr GameText kIllegalAnimationLog{0x6a0034};    // "Illegale Animation bei Figur, Anim Nr. %u"
 inline constexpr GameText kSettlerTodoLog{0x6a0060};         // "art %u, owner %u, todo %u, todocount %u"
 inline constexpr GameText kSuspiciousTodoCountLog{0x6a0088}; // "extrem verdächtiger todocount"
+
+
+// wip/events-r8 batch: CLogicThread::ProcessEvents (logic/events/).
+// --- events-r8 frame ---
+inline constexpr GameGlobal<const wchar_t[3]> kChatPromptSuffix{0x7300f4};   // L": " after the player name in the chat input
+inline constexpr GameText kCampaignAmazonsVsOthers{0x7300c4};      // "Activating campaign Amazon vs Others %u (%u)"
+inline constexpr GameText kCampaignAmazonsVsOthersLog{0x73008c};   // "xxx Campaign manually enabled: Amazon vs Others %u (%u)"
+inline constexpr GameText kCampaignOthersVsAmazons{0x73005c};      // "Activating campaign Others vs Amazons %u (%u)"
+inline constexpr GameText kCampaignOthersVsAmazonsLog{0x730020};   // "xxx Campaign manually enabled: Others vs Amazons %u (%u)"
+// (end of the part)
+//
+// --- events-r8 part A (build menu, settler menus) ---
+// (end of the part)
+//
+// --- events-r8 part B (statistics) ---
+// (end of the part)
+//
+// --- events-r8 part C (building info) ---
+// (end of the part)
+//
+// --- events-r8 part D (message menus, players, soldiers) ---
+// (end of the part)
+//
+// --- events-r8 end ---
 }  // namespace s3re::game::texts

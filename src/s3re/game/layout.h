@@ -384,13 +384,13 @@ struct Player {
     std::int32_t start_x;            // 0x010
     std::int32_t start_y;            // 0x014
     std::int32_t unk018;             // 0x018
-    std::int32_t unk01c;             // 0x01c -1 in the constructor
+    std::int32_t net_slot;           // 0x01c -1 in the constructor; the network id (ExecuteCommands 0xfe/0xff set it; the chat sends to bit net_slot)
     // 0x020: idle-settler list heads per type; entries 0..4 double as the
     // building request counters (use the accessors below for those).
     std::uint16_t settler_lists[kSettlerTypes];  // 0x020
     std::uint32_t soldier_strength;  // 0x080 recomputed every step by UpdateEnvironment from goods 10 (and 28 for race 1) in the areas; read by UpdateSoldier's damage (0x50f235), so probably the soldiers' fighting strength
     std::int32_t site_stamp;         // 0x084 0xffff at start, -1 per new building site (restarts at 0xffff below 60001); stored in the site's work_y
-    std::int32_t unk088;             // 0x088 UI
+    std::int32_t chat_recipient;     // 0x088 1 = the chat line goes to this player (ProcessEvents F5/F6 and the players menu; player_info.cpp)
     std::int32_t mana;               // 0x08c
     std::int32_t mana_total;         // 0x090 added to with mana (temples, offerings); promotions (command 0x18) are paid from it; read by commands and the UI
     std::int32_t spell_mana[8];      // 0x094

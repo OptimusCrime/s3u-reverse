@@ -3,7 +3,7 @@
 // once by CLogicThread::Step on the first step (g_logicStartState 0xfa),
 // after the world was loaded. Resets the UI state in the world and in
 // S3.EXE's data:
-//   - g_unk7dfd40, g_unk7dfd34..3c = 0; refresh_ui = draw_flag_2d280 = 1;
+//   - g_unk7dfd40, g_dragSelecting..3c = 0; refresh_ui = draw_flag_2d280 = 1;
 //     the 64 minimap slice flags = 0;
 //   - landscape_y = 0, landscape_x = 0, landscape_step = 13; last_search_x /
 //     _y = -1; ui_cursor_mode = 6;
@@ -76,9 +76,9 @@ std::uint32_t __fastcall CGameData_FinishInitialising(CGameData* world, void*) {
     g_hitAreaReadHalf = 0;
     world->search_generation = 1;
     world->draw_call_counter = 0;
-    g_unk7dfd34 = 0;
-    g_unk7dfd38 = 0;
-    g_unk7dfd3c = 0;
+    g_dragSelecting = 0;
+    g_lastMouseX = 0;
+    g_lastMouseY = 0;
     world->jump_return_x = 0;
     world->jump_return_y = 0;
     world->jump_tick = 0;
@@ -120,9 +120,9 @@ struct ExeState {
         hitRead = g_hitAreaReadCount;
         hitDraw = g_hitAreaDrawCount;
         hitHalf = g_hitAreaReadHalf;
-        u34 = g_unk7dfd34;
-        u38 = g_unk7dfd38;
-        u3c = g_unk7dfd3c;
+        u34 = g_dragSelecting;
+        u38 = g_lastMouseX;
+        u3c = g_lastMouseY;
         u40 = g_unk7dfd40;
     }
     void Restore() const {
@@ -133,9 +133,9 @@ struct ExeState {
         g_hitAreaReadCount = hitRead;
         g_hitAreaDrawCount = hitDraw;
         g_hitAreaReadHalf = hitHalf;
-        g_unk7dfd34 = u34;
-        g_unk7dfd38 = u38;
-        g_unk7dfd3c = u3c;
+        g_dragSelecting = u34;
+        g_lastMouseX = u38;
+        g_lastMouseY = u3c;
         g_unk7dfd40 = u40;
     }
 };

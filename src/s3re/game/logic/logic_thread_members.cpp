@@ -97,7 +97,7 @@ std::uint32_t __fastcall CLogicThread_Setup(CLogicThread* self, void*, std::uint
                                             std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
                                             std::uint32_t a7, std::uint32_t a8, std::uint32_t a9, std::uint32_t a10) {
     CLogicThread* thread = LogicThreadOf(self);
-    thread->setup_3c0 = a1;
+    thread->ui_events = reinterpret_cast<MessageQueue*>(a1);
     thread->toNet = reinterpret_cast<MessageQueue*>(a2);
     thread->fromNet = reinterpret_cast<MessageQueue*>(a3);
     thread->setup_3b8 = static_cast<std::uint8_t>(a4);

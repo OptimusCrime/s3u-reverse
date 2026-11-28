@@ -194,9 +194,9 @@ CGameData* __fastcall CGameData_Construct(CGameData* self, void*) {
     RawAt<std::uint32_t>(self, 0x366fc) = 0;
     g_stepCountdown = 0;
     g_fastForwarding = 0;
-    g_unk7dfd34 = 0;
-    g_unk7dfd38 = 0;
-    g_unk7dfd3c = 0;
+    g_dragSelecting = 0;
+    g_lastMouseX = 0;
+    g_lastMouseY = 0;
     g_logicStartState = 0;
     g_gameTick = 0;
     g_lastDrawnTick = 0;
@@ -204,7 +204,7 @@ CGameData* __fastcall CGameData_Construct(CGameData* self, void*) {
     g_hitAreaDrawCount = 0;
     g_hitAreaReadHalf = 0;
     g_unk730f4c = 1;
-    g_unk7dfd70 = 0;
+    g_rightDownTime = 0;
     g_unk7dfd74 = 0;
     g_unk7dfd78 = 0;
     g_unk7dfd7c = 0;
@@ -262,11 +262,11 @@ struct GlobalsSnapshot {
 GlobalsSnapshot TakeGlobals() {
     GlobalsSnapshot s{};
     const std::uint32_t v[] = {g_stepCountdown, static_cast<std::uint32_t>(g_fastForwarding.get()),
-                               static_cast<std::uint32_t>(g_unk7dfd34.get()), static_cast<std::uint32_t>(g_unk7dfd38.get()),
-                               static_cast<std::uint32_t>(g_unk7dfd3c.get()), g_logicStartState, g_gameTick, g_lastDrawnTick,
+                               static_cast<std::uint32_t>(g_dragSelecting.get()), static_cast<std::uint32_t>(g_lastMouseX.get()),
+                               static_cast<std::uint32_t>(g_lastMouseY.get()), g_logicStartState, g_gameTick, g_lastDrawnTick,
                                static_cast<std::uint32_t>(g_hitAreaReadCount.get()), static_cast<std::uint32_t>(g_hitAreaDrawCount.get()),
                                static_cast<std::uint32_t>(g_hitAreaReadHalf.get()), static_cast<std::uint32_t>(g_unk730f4c.get()),
-                               static_cast<std::uint32_t>(g_unk7dfd70.get()), static_cast<std::uint32_t>(g_unk7dfd74.get()),
+                               static_cast<std::uint32_t>(g_rightDownTime.get()), static_cast<std::uint32_t>(g_unk7dfd74.get()),
                                static_cast<std::uint32_t>(g_unk7dfd78.get()), static_cast<std::uint32_t>(g_unk7dfd7c.get()),
                                static_cast<std::uint32_t>(g_unk730f50.get()), static_cast<std::uint32_t>(g_unk7deb4c.get()), 0, 0};
     std::memcpy(s.values, v, sizeof(v));
@@ -279,9 +279,9 @@ GlobalsSnapshot TakeGlobals() {
 void RestoreGlobals(const GlobalsSnapshot& s) {
     g_stepCountdown = s.values[0];
     g_fastForwarding = static_cast<std::int32_t>(s.values[1]);
-    g_unk7dfd34 = static_cast<std::int32_t>(s.values[2]);
-    g_unk7dfd38 = static_cast<std::int32_t>(s.values[3]);
-    g_unk7dfd3c = static_cast<std::int32_t>(s.values[4]);
+    g_dragSelecting = static_cast<std::int32_t>(s.values[2]);
+    g_lastMouseX = static_cast<std::int32_t>(s.values[3]);
+    g_lastMouseY = static_cast<std::int32_t>(s.values[4]);
     g_logicStartState = s.values[5];
     g_gameTick = s.values[6];
     g_lastDrawnTick = s.values[7];
@@ -289,7 +289,7 @@ void RestoreGlobals(const GlobalsSnapshot& s) {
     g_hitAreaDrawCount = static_cast<std::int32_t>(s.values[9]);
     g_hitAreaReadHalf = static_cast<std::int32_t>(s.values[10]);
     g_unk730f4c = static_cast<std::int32_t>(s.values[11]);
-    g_unk7dfd70 = static_cast<std::int32_t>(s.values[12]);
+    g_rightDownTime = static_cast<std::int32_t>(s.values[12]);
     g_unk7dfd74 = static_cast<std::int32_t>(s.values[13]);
     g_unk7dfd78 = static_cast<std::int32_t>(s.values[14]);
     g_unk7dfd7c = static_cast<std::int32_t>(s.values[15]);
