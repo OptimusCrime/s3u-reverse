@@ -2378,3 +2378,64 @@ SPECS += [
              callees=DLG_TEXT_CALLEES, virtuals={0x00: 2, 0x1c: 0}, exempt_blocks=(0x00420480,),
              presets=dlg_presets(dlg_vb(-0x440), dlg_list_box)),
 ]
+
+
+# -- wip/dialog-r8 batch 5: LayoutColumns (ui_list_view_cells.cpp), the
+# scroll bar's click and the animated button's timer (ui_control_input.cpp).
+# The scroll bar's track sometimes 0 high (x87 division by zero: inf/NaN
+# through _ftol); OnTimer's states -1..5 (out-of-range ones index the
+# sequence ids without a check), its jump table (0x41b2a0) after the code.
+DLG_INPUT_CALLEES = dict(DLG_TEXT_CALLEES)
+DLG_INPUT_CALLEES.update({0x427650: (3, "thiscall", "probe"), 0x41a990: (0, "thiscall", "probe"),
+                          0x41a9a0: (0, "thiscall", "probe"), 0x5fad20: (1, "thiscall", "probe")})
+
+
+def dlg_layout_columns(rng):
+    out = dlg_columns(rng)
+    out += [(DLG_COLUMNS + 0x20 * k + 8, rng.randint(-5, 60) & 0xFFFFFFFF, 4) for k in range(8)]
+    out += [(DLG_THIS + 0x4e0, rng.randint(-10, 50) & 0xFFFFFFFF, 4),
+            (DLG_THIS + 0x4e8, rng.randint(-10, 200) & 0xFFFFFFFF, 4)]
+    return out
+
+
+def dlg_scroll_track(rng):
+    top = rng.randint(-5, 60)
+    bottom = top if rng.random() < 0.1 else top + rng.randint(-3, 160)
+
+    def value():
+        return rng.getrandbits(32) if rng.random() < 0.12 else rng.randint(-3, 40) & 0xFFFFFFFF
+    track = [rng.randint(-5, 20), top, rng.randint(20, 120), bottom]
+    return [(DLG_THIS - 0x24 + 4 * k, v & 0xFFFFFFFF, 4) for k, v in enumerate(track)] + [
+        (DLG_THIS - 0x14, 0 if rng.random() < 0.12 else value(), 4), (DLG_THIS - 0x0c, value(), 4),
+        (DLG_THIS - 0x10, rng.randrange(20), 4),
+        (DLG_THIS - 0x240, rng.choice([0, WORLD_BASE + DLG_OTHER, WORLD_BASE + DLG_OTHER]), 4),
+        (DLG_OTHER, FAKE_VTABLE, 4)]
+
+
+def dlg_track_click(rng, pool):
+    return (rng.randint(-5, 120) & 0xFFFF) | ((rng.randint(-5, 220) & 0xFFFF) << 16)
+
+
+def dlg_animated_button(rng):
+    out = [(DLG_THIS - 0x1c, rng.randint(-1, 5) & 0xFFFFFFFF, 4),
+           (DLG_THIS - 0x18, 0x80000000 if rng.random() < 0.1 else rng.randint(-2, 3) & 0xFFFFFFFF, 4)]
+    out += [(DLG_THIS - 0x14 + 4 * k, 0xFFFFFFFF if rng.random() < 0.35 else rng.randrange(50), 4)
+            for k in range(-1, 6)]
+    return out
+
+
+SPECS += [
+    dlg_spec("CListView_LayoutColumns", 0x00425150, [], callees=DLG_INPUT_CALLEES, virtuals={0x04: 1}, eax_mask=0,
+             # Dead: the column index runs below the column count, which is
+             # the vector's length, so both operator[] checks never fail (all
+             # their out-of-range and empty-vector blocks).
+             exempt_blocks=(0x42519d, 0x4251a1, 0x4251bb, 0x4251c7, 0x4251cc, 0x4251cf, 0x4251df, 0x4251e3, 0x4251e7,
+                            0x4251eb, 0x4251ed, 0x42521a, 0x42521e, 0x425238, 0x425244, 0x425249, 0x42524c, 0x42525c,
+                            0x425260, 0x425264, 0x425268, 0x42526a),
+             presets=dlg_presets(dlg_vb(4), dlg_layout_columns)),
+    dlg_spec("CVScrollBar_OnLButtonDown", 0x0041e470, [anything, anything, dlg_track_click, anything, anything],
+             callees=DLG_INPUT_CALLEES, virtuals={0x00: 2, 0x1c: 0},
+             presets=dlg_presets(dlg_vb(-0x2f0), dlg_scroll_track)),
+    dlg_spec("CAnimatedButton_OnTimer", 0x0041b1b0, [], callees=DLG_INPUT_CALLEES, cover_until=0x0041b2a0,
+             presets=dlg_presets(dlg_vb(-0x64), dlg_animated_button)),
+]

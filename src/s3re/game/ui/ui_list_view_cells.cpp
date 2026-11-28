@@ -37,6 +37,12 @@
 //   rows group (+0x38) with (shown, the bar's element). The element's rect
 //   is read and the client rect written in the original's order. EAX =
 //   ShowChild's.
+// CListView::LayoutColumns (0x00425150): x = the client's left (+0x4e0);
+//   unless x > the client's right (+0x4e8, signed, re-read): for each column
+//   (count +0xdc, unsigned) its header placed (CColumn::SetPosition 0x427650
+//   (x, the element's top, header height +0x180)) and x += its width (+8),
+//   until x passes the right edge. Both accesses of a column go through the
+//   operator[] check (width first). EAX not used.
 
 #include "game/ui/member_test_kit.h"
 #include "game/ui/screen_element_layout.h"
@@ -66,6 +72,7 @@ constexpr std::uintptr_t kControlSetTooltip = 0x00418330;  // CControl::SetToolt
 constexpr std::uintptr_t kScrollSetRange = 0x0041e380;     // CVScrollBar::SetRange (ours)
 constexpr std::uintptr_t kElementSetRect = 0x004156e0;     // CScreenElement::SetRect (ours)
 constexpr std::uintptr_t kGroupShowChild = 0x00417090;     // CScreenGroup::ShowChild (ours)
+constexpr std::uintptr_t kColumnSetPosition = 0x00427650;  // CListView::CColumn::SetPosition (ours)
 
 constexpr std::uint32_t kColumnUpDown = 6;    // CColumn type: CUpDown cells
 constexpr std::uint32_t kColumnProgress = 7;  // CColumn type: CProgressBar cells
@@ -90,6 +97,8 @@ constexpr std::int32_t kClientRect = 0x4e0;
 constexpr std::int32_t kScrollBarShown = 0x4f0;
 constexpr std::int32_t kHeadersShown = 0x4f2;
 constexpr std::int32_t kColumnType = 4;          // in a CColumn
+constexpr std::int32_t kColumnWidth = 8;         // in a CColumn
+constexpr std::int32_t kColumnCount = 0xdc;      // the column vector's length
 }  // namespace off
 
 template <typename T>
@@ -253,6 +262,29 @@ std::uint32_t __fastcall CListView_UpdateScrollBar(std::uintptr_t self, void*) {
                                                         static_cast<std::uint32_t>(barElement));
 }
 
+// Purpose: Places the column headers of a list view left to right.
+void __fastcall CListView_LayoutColumns(std::uintptr_t self, void*) {
+    const RECT& client = Field<RECT>(self, off::kClientRect);
+    LONG x = client.left;
+    if (x > client.right) {
+        return;
+    }
+    for (std::uint32_t i = 0; i < Field<std::uint32_t>(self, off::kColumnCount); ++i) {
+        const LONG start = x;
+        x += Field<LONG>(Column(self, static_cast<std::int32_t>(i)), off::kColumnWidth);
+        const std::uintptr_t column = Column(self, static_cast<std::int32_t>(i));
+        const auto height = Field<std::uint32_t>(self, off::kHeaderHeight);
+        const LONG top = Field<LONG>(self + 4 + Displacement(self, 4), offsetof(ui::CScreenElement, rect) + 4);
+        reinterpret_cast<Thiscall3>(kColumnSetPosition)(column, nullptr, static_cast<std::uint32_t>(start),
+                                                        static_cast<std::uint32_t>(top), height);
+        if (x > client.right) {
+            break;
+        }
+    }
+}
+
+using LayoutFn = void(__fastcall*)(std::uintptr_t self, void* edx);
+S3RE_HOOK(0x00425150, CListView_LayoutColumns, LayoutFn, Original_CListView_LayoutColumns, CListView_LayoutColumns);
 S3RE_HOOK(0x00424c70, CListView_SetCellUpDown, SetUpDownFn, Original_CListView_SetCellUpDown, CListView_SetCellUpDown);
 S3RE_HOOK(0x00424d70, CListView_SetCellProgress, SetProgressFn, Original_CListView_SetCellProgress,
           CListView_SetCellProgress);
@@ -330,6 +362,7 @@ struct Members {
     SetProgressFn progress = &CListView_SetCellProgress;
     SetTooltipFn tooltip = &CListView_SetColumnTooltip;
     UpdateFn update = &CListView_UpdateScrollBar;
+    LayoutFn layout = &CListView_LayoutColumns;
 };
 
 void CompareAll(test::Context& ctx, const Members& ours, int cases) {
@@ -345,7 +378,8 @@ void CompareAll(test::Context& ctx, const Members& ours, int cases) {
         .This<kControlSetTooltip, 1>()
         .This<kScrollSetRange, 3>()
         .This<kElementSetRect, 1>()
-        .This<kGroupShowChild, 2>();
+        .This<kGroupShowChild, 2>()
+        .This<kColumnSetPosition, 3>();
     const SetUpDownFn originalUpDown = Original_CListView_SetCellUpDown;
     kit::Compare(
         ctx, "SetCellUpDown", cases, Columns,
@@ -392,6 +426,28 @@ void CompareAll(test::Context& ctx, const Members& ours, int cases) {
         ctx, "UpdateScrollBar", cases, ScrollBarObject,
         [&](std::uintptr_t base, test::Rng&) { return Original_CListView_UpdateScrollBar(base + kThis, nullptr); },
         [&](std::uintptr_t base, test::Rng&) { return ours.update(base + kThis, nullptr); }, 0xffffffffu, &Effect);
+    // LayoutColumns: the column vector as above, widths small (sometimes
+    // negative), the client's left and right small, the element behind its vbptr.
+    kit::Compare(
+        ctx, "LayoutColumns", cases,
+        [](test::Rng& r, std::uint8_t* b) {
+            Columns(r, b);
+            kit::VbPtr(b, kThis + 4, 0x600, 0);
+            for (int k = 0; k < 8; ++k) {
+                kit::Put(b, kColumnData + kColumnBytes * k + off::kColumnWidth, static_cast<std::uint32_t>(r.Range(-5, 60)));
+            }
+            kit::Put(b, kThis + off::kClientRect, static_cast<std::uint32_t>(r.Range(-10, 50)));
+            kit::Put(b, kThis + off::kClientRect + 8, static_cast<std::uint32_t>(r.Range(-10, 200)));
+        },
+        [&](std::uintptr_t base, test::Rng&) {
+            Original_CListView_LayoutColumns(base + kThis, nullptr);
+            return 0u;
+        },
+        [&](std::uintptr_t base, test::Rng&) {
+            ours.layout(base + kThis, nullptr);
+            return 0u;
+        },
+        0, &Effect);
 }
 
 void __fastcall WrongUpDown(std::uintptr_t self, void* edx, std::uint32_t line, std::uint32_t column,
@@ -406,6 +462,11 @@ void __fastcall WrongTooltip(std::uintptr_t self, void* edx, std::uint32_t colum
     }
     (void)edx;
 }
+void __fastcall WrongLayout(std::uintptr_t self, void* edx) {
+    Field<RECT>(self, off::kClientRect).right += 1;  // one more pixel of room
+    CListView_LayoutColumns(self, edx);
+    Field<RECT>(self, off::kClientRect).right -= 1;
+}
 std::uint32_t __fastcall WrongUpdate(std::uintptr_t self, void* edx) {
     const std::uint32_t result = CListView_UpdateScrollBar(self, edx);
     Field<RECT>(self, off::kClientRect).right -= 1;
@@ -419,9 +480,11 @@ S3RE_TEST(UiListViewCells_MatchOriginal) {
 }
 
 S3RE_TEST(UiListViewCells_ComparisonDetectsWrongImplementation) {
-    for (int k = 0; k < 3; ++k) {
+    for (int k = 0; k < 4; ++k) {
         Members wrong;
-        if (k == 0) {
+        if (k == 3) {
+            wrong.layout = &WrongLayout;
+        } else if (k == 0) {
             wrong.upDown = &WrongUpDown;
         } else if (k == 1) {
             wrong.tooltip = &WrongTooltip;
