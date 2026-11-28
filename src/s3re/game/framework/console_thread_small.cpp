@@ -51,6 +51,7 @@
 //   (CMenuSharedData::~CMenuSharedData 0x467070), freed and cleared.
 //   Called by CConsoleThread::vf05. Was App_sub_405600.
 
+#include "game/globals.h"
 #include "game/tables.h"
 #include "game/texts.h"
 #include "hooks.h"
@@ -177,8 +178,6 @@ constexpr std::uintptr_t kMenuSharedDestroy = 0x00467070;   // CMenuSharedData::
 constexpr std::uintptr_t kNetLeave = 0x00470170;            // Net_sub_470170 (network code)
 constexpr std::uintptr_t kIsMultiplayer = 0x004318d0;       // GameSettings::IsMultiplayer (ours)
 constexpr std::uintptr_t kSettingsReset = 0x00433810;       // GameSettings::Reset (ours)
-constexpr std::uintptr_t kGameSettings = 0x007a7a18;        // g_gameSettings
-constexpr std::uintptr_t kGraphicsDataLock = 0x007a800c;    // g_graphicsDataLock (a Win32::CSemaphore*)
 constexpr std::uint32_t kThreadToMessageTarget = 0x104;     // OnThreadMessage's ECX: the thread + 0x104
 constexpr std::uint32_t kThreadToWindowedApp = 0x4c;        // the CWindowedApp part: the thread + 0x4c
 constexpr std::uint32_t kMessageStartupStep = 0x800;
@@ -276,11 +275,11 @@ void __fastcall CConsoleThread_LeaveGame(ConsoleThreadFields* self, void*) {
     self->ready_b0 = 0;
     reinterpret_cast<MemberFn2>(kWindowSetState)(self->value54, nullptr, self->game_state, 0);
     reinterpret_cast<MemberFn0>(kAppShutdown)(AddressOf(self), nullptr);
-    auto& graphicsLock = *reinterpret_cast<std::uint32_t*>(kGraphicsDataLock);  // raw-ok: g_graphicsDataLock
-    if (graphicsLock != 0) {
-        DeleteThroughSubobject4(graphicsLock);
+    void*& graphicsLock = g_graphicsDataLock.get();
+    if (graphicsLock != nullptr) {
+        DeleteThroughSubobject4(reinterpret_cast<std::uintptr_t>(graphicsLock));
     }
-    graphicsLock = 0;
+    graphicsLock = nullptr;
     if (self->object4c != 0) {
         DeleteThroughSubobject4(self->object4c);
     }
@@ -296,10 +295,11 @@ void __fastcall CConsoleThread_LeaveGame(ConsoleThreadFields* self, void*) {
     self->object60 = 0;
     VirtualCall0(AddressOf(&self->embedded7c), 1);
     VirtualCall0(AddressOf(&self->embedded68), 1);
-    if ((reinterpret_cast<MemberFn0>(kIsMultiplayer)(kGameSettings, nullptr) & 0xff) != 0) {
+    const std::uintptr_t settings = g_gameSettings.address();
+    if ((reinterpret_cast<MemberFn0>(kIsMultiplayer)(settings, nullptr) & 0xff) != 0) {
         reinterpret_cast<MemberFn0>(kNetLeave)(self->net9c, nullptr);
     } else {
-        reinterpret_cast<MemberFn0>(kSettingsReset)(kGameSettings, nullptr);
+        reinterpret_cast<MemberFn0>(kSettingsReset)(settings, nullptr);
     }
 }
 
@@ -489,9 +489,9 @@ StateOutcome RunState(const std::vector<std::uint8_t>& start, std::uint32_t mult
     for (std::size_t at : {std::size_t{0x104}, std::size_t{0x114}, std::size_t{0x124}}) {
         put(at, reinterpret_cast<std::uintptr_t>(kSubobjectVtable));
     }
-    auto& lock = *reinterpret_cast<std::uint32_t*>(kGraphicsDataLock);  // raw-ok: g_graphicsDataLock
-    const std::uint32_t savedLock = lock;
-    lock = (mask & 16) != 0 ? 0 : static_cast<std::uint32_t>(g_stateBase + 0x120);
+    void*& lock = g_graphicsDataLock.get();
+    void* const savedLock = lock;
+    lock = (mask & 16) != 0 ? nullptr : reinterpret_cast<void*>(g_stateBase + 0x120);
     test::PatchJump(kOperatorDeleteAddress, reinterpret_cast<const void*>(&FakeOperatorDelete));
     {
         test::CalleeStubs stubs;
@@ -519,7 +519,7 @@ StateOutcome RunState(const std::vector<std::uint8_t>& start, std::uint32_t mult
         }
     }
     test::UnpatchJump(kOperatorDeleteAddress);
-    out.log.push_back(lock == 0 ? 0 : Rel(lock));
+    out.log.push_back(lock == nullptr ? 0 : Rel(reinterpret_cast<std::uintptr_t>(lock)));
     lock = savedLock;
     g_stateLog = nullptr;
     // Fake pointers relative to the buffer.
