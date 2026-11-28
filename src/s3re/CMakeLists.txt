@@ -295,6 +295,7 @@ add_library(s3re SHARED
     game/ui/ui_list_view_cells.cpp
     game/ui/ui_text_view_layout.cpp
     game/ui/ui_control_input.cpp
+    game/ui/ui_dropdown_text.cpp
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
     game/graphics/building_slots.cpp

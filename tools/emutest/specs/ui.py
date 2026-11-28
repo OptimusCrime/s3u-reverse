@@ -2439,3 +2439,60 @@ SPECS += [
     dlg_spec("CAnimatedButton_OnTimer", 0x0041b1b0, [], callees=DLG_INPUT_CALLEES, cover_until=0x0041b2a0,
              presets=dlg_presets(dlg_vb(-0x64), dlg_animated_button)),
 ]
+
+
+# -- wip/dialog-r8 batch 6: CEditControl::SetText, CDropdown::OnListSelect
+# (ui_dropdown_text.cpp). NarrowToWideString (fastcall, no stack arguments)
+# is probed: it fills the caller's local 16-bit string (ECX) with no buffer
+# or one whose count byte is 0, 0xff or shared, and returns the local
+# (recorded by its contents at SetTextW: a stack address); its source (EDX)
+# is recorded. The dropdown's list box
+# items (from the GetItems probe) are a string vector in scratch.
+DLG_WIDE_BUFFER = DLG_LINKS + 0x12
+
+
+def dlg_widen(machine, ecx, args, h):
+    from unicorn.x86_const import UC_X86_REG_ECX
+    local = machine.uc.reg_read(UC_X86_REG_ECX)
+    choice = h % 6
+    words = [h & 0xFF, 0 if choice == 0 else WORLD_BASE + DLG_WIDE_BUFFER, (h >> 8) % 9, 0]
+    machine.guest_write(local, b"".join(w.to_bytes(4, "little") for w in words))
+    if choice:
+        machine.guest_write(WORLD_BASE + DLG_WIDE_BUFFER - 1, bytes([[0, 0xFF, 1, 2, 0xFE][choice - 1]]))
+    return local  # the result object, as NarrowToWideString returns it
+
+
+def dlg_widen_source(machine, ecx, args):
+    from unicorn.x86_const import UC_X86_REG_EDX
+    return (machine.uc.reg_read(UC_X86_REG_EDX),)
+
+
+DLG_STRINGS = SCRATCH + 7 * SCRATCH_SLOT_BYTES + 0x800
+DLG_DROPDOWN_CALLEES = dict(DLG_INPUT_CALLEES)
+DLG_DROPDOWN_CALLEES.update({0x60b840: (0, "stdcall", "probe", dlg_widen, dlg_widen_source),
+                             0x418d40: (1, "thiscall", "probe", None,
+                                        lambda m, ecx, args: (ecx, bytes(m.guest_read(args[0], 16)))),
+                             0x41f240: (0, "thiscall", lambda h: WORLD_BASE + DLG_STRINGS),
+                             0x40a580: (1, "thiscall", "probe"), 0x418b40: (1, "thiscall", "probe")})
+DLG_SETTEXT_CALLEES = dict(DLG_DROPDOWN_CALLEES)
+del DLG_SETTEXT_CALLEES[0x418b40]  # SetText itself
+
+
+def dlg_dropdown(rng):
+    return [(DLG_THIS + 0x38, FAKE_VTABLE, 4), (DLG_THIS + 0x1cc, WORLD_BASE + MEMBER_VBTABLE, 4),
+            (DLG_THIS + 4, WORLD_BASE + MEMBER_VBTABLE, 4), (MEMBER_VBTABLE + 4, 0x100, 4),
+            (DLG_THIS + 0xb4, rng.choice([0, WORLD_BASE + DLG_OTHER, WORLD_BASE + DLG_OTHER]), 4),
+            (DLG_OTHER, FAKE_VTABLE, 4),
+            (DLG_STRINGS, FAKE_VTABLE, 4), (DLG_STRINGS + 8, WORLD_BASE + DLG_STRINGS + 0x40, 4),
+            (DLG_STRINGS + 0xc, rng.choice([0, 0, 1, 4]), 4), (DLG_STRINGS + 0x14, rng.choice([0, 0, 1, 2, 5]), 4)]
+
+
+SPECS += [
+    dlg_spec("CEditControl_SetText", 0x00418b40, [anything], callees=DLG_SETTEXT_CALLEES),
+    # Dead: 0x422680 and 0x42273d test the list box member and `this` for
+    # null; 0x4226f1 clamps the length after growing an empty vector
+    # (DLG_CLAMP_DEAD).
+    dlg_spec("CDropdown_OnListSelect", 0x00422670, [anything, dlg_column_index], callees=DLG_DROPDOWN_CALLEES,
+             virtuals={0x00: 2, 0x04: 1}, exempt_blocks=(0x00422680, 0x0042273d, 0x004226f1),
+             presets=dlg_presets(dlg_dropdown)),
+]

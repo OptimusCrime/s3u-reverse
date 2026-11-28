@@ -76,14 +76,16 @@ inline std::uint32_t Normalize(std::uint32_t value) {
     return OnStack(value) ? kStackTag : value;
 }
 
-inline std::uint32_t Record(std::uint32_t callee, std::uint32_t self, const std::uint32_t* args, std::uint32_t count) {
+inline std::uint32_t Record(std::uint32_t callee, std::uint32_t self, const std::uint32_t* args, std::uint32_t count,
+                            bool pointees = true) {
     Call call{};
     call.callee = callee;
     call.self = Normalize(self);
     call.count = count;
     for (std::uint32_t i = 0; i < count && i < 8; ++i) {
         call.args[i] = Normalize(args[i]);
-        if (i < 2 && (args[i] - Current().base < kBytes - 16 || (OnStack(args[i]) && OnStack(args[i] + 15)))) {
+        if (pointees && i < 2 &&
+            (args[i] - Current().base < kBytes - 16 || (OnStack(args[i]) && OnStack(args[i] + 15)))) {
             std::memcpy(call.pointee[i], reinterpret_cast<const void*>(args[i]), 16);
         }
     }
@@ -132,6 +134,16 @@ std::uint32_t __fastcall FastStub(std::uint32_t ecx, std::uint32_t edx, Dword<I>
     return Record(Id, 0, values, sizeof...(I) + 2);
 }
 
+// fastcall callee whose pointer arguments are outputs (uninitialized
+// buffers): their contents are not recorded.
+template <std::uint32_t Id, std::size_t... I>
+std::uint32_t __fastcall FastOutStub(std::uint32_t ecx, std::uint32_t edx, Dword<I>... args) {
+    const std::uint32_t values[sizeof...(I) + 3] = {ecx, edx, args..., 0};
+    return Record(Id, 0, values, sizeof...(I) + 2, false);
+}
+
+template <std::uint32_t Id, std::size_t... I>
+const void* FastOutStubFor(std::index_sequence<I...>) { return reinterpret_cast<const void*>(&FastOutStub<Id, I...>); }
 template <std::uint32_t Id, std::size_t... I>
 const void* ThisStubFor(std::index_sequence<I...>) { return reinterpret_cast<const void*>(&ThisStub<Id, I...>); }
 template <std::uint32_t Id, std::size_t... I>
@@ -160,6 +172,8 @@ public:
     Stubs& Cdecl() { return Patch(Address, CdeclStubFor<Address>(std::make_index_sequence<N>{})); }
     template <std::uint32_t Address, int N>
     Stubs& Fast() { return Patch(Address, FastStubFor<Address>(std::make_index_sequence<N>{})); }
+    template <std::uint32_t Address, int N>
+    Stubs& FastOut() { return Patch(Address, FastOutStubFor<Address>(std::make_index_sequence<N>{})); }
 
 private:
     Stubs& Patch(std::uint32_t address, const void* stub) {
