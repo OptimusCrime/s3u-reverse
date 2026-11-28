@@ -27,6 +27,29 @@ LOGBOOK session entry).
   only the words the functions wrote as links, or fill with values outside
   both arenas.
 
+- **CLogicThread::Step (wip/logic-r8, logic_step.cpp):** in the game's own
+  F12 fast-forward, the step where the countdown reaches 0 compares the
+  original's "signalled" local, which that branch never writes (a stack
+  leftover: the last wait of an earlier step, unless other code reused the
+  slot); ours keeps the last wait's result in g_lastSignalled. The
+  unwritten bytes of Step's network messages (0xf1/0xfb/0xfc/0xfd) are
+  stack leftovers in the original, 0 in ours (the recorder ignores bytes
+  9..11; byte 3 is 0 in every recording; bytes 5..7 of 0xfc/0xfd can hold
+  an earlier sprintf text in the original). The emulator spec and the
+  in-process test avoid both on purpose.
+
+- **Logic thread functions still original (wip/logic-r8 scope, left
+  over):** CLogicThread::OnStart 0x53c9e0 (1,100 instructions; its lobby
+  block 0x53d0af..0x53d3fd with Watcom vectors and string compares has to
+  be reimplemented too), PrepareDrawData 0x51f110 (4,000 instructions),
+  the multiplayer save helpers CommitMultiplayerSave 0x50af70 /
+  DiscardMultiplayerTempSave 0x50b3c0 (string paths, Get/SetCurrentDirectory,
+  DeleteFileA), ReadSaveSlotInfo 0x50b670, CGameData::DumpTableToFile
+  0x4ff6d0 (sync dump), and the lobby members (SendGameStatusToLobby,
+  PollLobbyStatus, PollLobbyChat, CheckLobbyConnections, the two Watcom
+  vectors of LogicInit.cpp). Step calls OnStart's world through the
+  original; ProcessEvents belongs to events-r8.
+
 ## Libraries and the standalone build
 - **C runtime functions the game code calls, and which behaviour must be
   copied exactly (session 51).** In hook mode the game's statically

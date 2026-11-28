@@ -109,14 +109,16 @@ ProcessEvents calls it from a button in menu 0xb.
 - The step table is at 0x72faf0: 16-byte entries {step, next step, text kind 253/254, text id 0x70090..}.
 - The texts are the "boot camp" lessons, e.g. 0x70090 "Greetings chosen! Welcome to the Settlers III boot
   camp ...".
-- `UpdateTutorial` 0x53fbb0 checks the current step's goal.
+- `UpdateTutorial` 0x53fbb0 checks the current step's goal and advances (AdvanceTutorialStep) when it is
+  reached, or at step 0 (wip/logic-r8: reimplemented; the goals per step are listed in
+  `src/s3re/game/logic/tutorial.cpp`, TutorialGoalReached).
 - `AdvanceTutorialStep` 0x53f950 moves on, restarts the wait (`StartTutorialWait` 0x515af0 = 100000) and
   shows the text (`ShowTutorialText` 0x540400, which wraps lines at 75 chars).
 - A click in ProcessEvents (0x532fd5) sets the countdown to 1, so `TutorialWaitDone` 0x515b00 ends the wait.
 - g_campaignMission 99 = the tutorial.
 
-Suggested field names:
-- world `+0x2d304 tutorial_wait`, `+0x2d308 tutorial_step` (re/world_layout.md now says "UI?/guess").
+Field names (wip/logic-r8, in layout.h and re/world_layout.md):
+- world `+0x2d304 tutorial_wait`, `+0x2d308 tutorial_step`.
 
 ## Lobby / ladder (online play)
 
